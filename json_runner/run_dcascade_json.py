@@ -10,7 +10,7 @@ current_dir = Path(__file__).parent
 src_path = current_dir.parent / 'src'
 sys.path.append(str(src_path))
 
-from main import DCASCADE_main
+from dcascade_main import DCASCADE_main
 from reach_data import ReachData
 from preprocessing import read_network, extract_Q, check_sediment_sizes, graph_preprocessing
 from GSD_curvefit import GSDcurvefit

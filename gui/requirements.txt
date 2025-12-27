@@ -1,0 +1,8 @@
+PyQt6
+PyQt6-WebEngine
+geopandas
+folium
+plotly
+pydantic
+qt-material
+mapclassify

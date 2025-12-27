@@ -1,6 +1,6 @@
 [project]
-name = "dcascade-py-2-0-0"
-version = "0.1.0"
+name = "dcascade-py"
+version = "2.0.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -10,12 +10,32 @@ dependencies = [
     "networkx==3.5",
     "numpy==2.3.2",
     "pandas==2.3.1",
+    "scipy>=1.16.3",
+    "shapely>=2.1.2",
+    "tqdm>=4.67.1",
+    "PyQt6",
+    "PyQt6-WebEngine",
+    "folium",
+    "plotly",
+    "pydantic",
+    "qt-material",
+    "mapclassify",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
-    "scipy>=1.16.3",
-    "shapely>=2.1.2",
-    "tqdm>=4.67.1",
+    "ruff",
 ]
+
+[tool.ruff]
+exclude = [
+    "src",
+    "user_scripts",
+    "unit_tests",
+    "post_process_examples",
+    "json_runner",
+    "inputs",
+    "docs",
+]
+line-length = 120

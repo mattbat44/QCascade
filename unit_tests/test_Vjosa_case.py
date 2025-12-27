@@ -18,7 +18,7 @@ import geopandas as gpd
 import numpy as np
 
 from GSD_curvefit import GSDcurvefit
-from main import DCASCADE_main
+from dcascade_main import DCASCADE_main
 from preprocessing import extract_Q, graph_preprocessing, read_network
 from reach_data import ReachData
 

@@ -57,3 +57,5 @@ D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-bas
 - **Sediment Classes:** Defined by `psi` (Krumbein phi scale).
 - **Transport Formulas:** Selected via indices (e.g., `indx_tr_cap`, `indx_tr_partition`) passed to the solver.
 - **Network Topology:** Defined by `FromN` (upstream node) and `ToN` (downstream node) columns in the input dataframe.
+
+

@@ -40,7 +40,7 @@ import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from GSD_curvefit import GSDcurvefit
-from main import DCASCADE_main
+from dcascade_main import DCASCADE_main
 from plot_function import dynamic_plot
 from preprocessing import (check_sediment_sizes, extract_Q,
                            graph_preprocessing, read_network)
