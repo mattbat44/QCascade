@@ -11,3 +11,7 @@ unit_tests/test_Po_case.py
 
 src/dcascade_py_2_0_0.egg-info
 src\dcascade_py_2_0_0.egg-info
+
+*/temp_config.json
+temp_config.json
+test_config.json
