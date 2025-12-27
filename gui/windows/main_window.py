@@ -7,6 +7,8 @@ import os
 
 from gui.widgets.map_widget import MapWidget
 from gui.widgets.plot_widget import PlotWidget
+from gui.widgets.discharge_editor import DischargeEditor
+from gui.widgets.results_viewer import ResultsViewer
 from gui.widgets.config_docks import (
     PathsDock, PhysicsDock, SedimentDock, TimeDock, OptionsDock
 )
@@ -72,12 +74,22 @@ class MainWindow(QMainWindow):
         self.map_widget = MapWidget(self)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.map_widget)
         
-        # --- Plots ---
+        # --- Discharge Editor ---
+        self.discharge_editor = DischargeEditor(self)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.discharge_editor)
+        
+        # --- Results Viewer ---
+        self.results_viewer = ResultsViewer(self)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.results_viewer)
+        
+        # --- Plots (legacy, kept for compatibility) ---
         self.plot_widget = PlotWidget(self)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.plot_widget)
         
-        # Tabify Map and Plot
-        self.tabifyDockWidget(self.map_widget, self.plot_widget)
+        # Tabify all right-side widgets
+        self.tabifyDockWidget(self.map_widget, self.discharge_editor)
+        self.tabifyDockWidget(self.discharge_editor, self.results_viewer)
+        self.tabifyDockWidget(self.results_viewer, self.plot_widget)
         self.map_widget.raise_()
         
         # --- Logs ---
@@ -89,6 +101,8 @@ class MainWindow(QMainWindow):
 
         # --- Connections ---
         self.paths_dock.shapefile_selected.connect(self.map_widget.load_shapefile)
+        self.paths_dock.csv_path.textChanged.connect(self.discharge_editor.set_discharge_path)
+        self.discharge_editor.discharge_updated.connect(self.on_discharge_updated)
 
     def create_toolbar(self):
         toolbar = QToolBar("Main Toolbar")
@@ -188,10 +202,34 @@ class MainWindow(QMainWindow):
     def on_simulation_finished(self, success, msg):
         if success:
             QMessageBox.information(self, "Simulation Finished", msg)
-            # TODO: Load results into PlotWidget
-            # self.plot_widget.load_results(...)
+            # Load results into viewer
+            self.load_results_after_simulation()
         else:
             QMessageBox.critical(self, "Simulation Failed", msg)
+    
+    def load_results_after_simulation(self):
+        """Load simulation results into the results viewer."""
+        try:
+            output_name = self.paths_dock.output_name.text()
+            output_dir = self.paths_dock.output_dir.text() or "cascade_results"
+            
+            # Construct results path
+            from pathlib import Path
+            if Path(output_dir).is_absolute():
+                results_path = Path(output_dir) / f"{output_name}.p"
+            else:
+                results_path = Path.cwd() / output_dir / f"{output_name}.p"
+            
+            if results_path.exists():
+                self.results_viewer.load_results_from_path(str(results_path))
+                self.results_viewer.raise_()  # Bring results viewer to front
+            
+        except Exception as e:
+            print(f"Warning: Could not auto-load results: {e}")
+    
+    def on_discharge_updated(self, path):
+        """Handle discharge data update."""
+        self.paths_dock.csv_path.setText(path)
 
     def closeEvent(self, event):
         # Save state
