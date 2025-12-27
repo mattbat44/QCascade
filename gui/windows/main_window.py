@@ -14,7 +14,7 @@ from gui.widgets.config_docks import (
 )
 from gui.core.config_manager import (
     DCascadeConfig, PathsConfig, SedimentConfig, TimeConfig, 
-    PhysicsConfig, OptionsConfig
+    PhysicsConfig, OptionsConfig, ExternalInputsConfig
 )
 from gui.core.runner_thread import RunnerThread
 
@@ -260,12 +260,23 @@ class MainWindow(QMainWindow):
             force_pass_external_inputs=self.options_dock.force_pass.isChecked()
         )
         
+        # External inputs from map widget (per-reach CSV mapping)
+        ext_cfg = None
+        try:
+            ext_dict = self.map_widget.get_external_inputs_config()
+            if ext_dict:
+                ext_cfg = ExternalInputsConfig(**ext_dict)
+        except Exception as e:
+            # Non-fatal: log in status bar
+            self.statusBar().showMessage(f"External inputs config error: {e}", 5000)
+
         return DCascadeConfig(
             paths=paths,
             sediment=sediment,
             time=time,
             physics=physics,
-            options=options
+            options=options,
+            external_inputs=ext_cfg
         )
 
     def on_log_message(self, msg):

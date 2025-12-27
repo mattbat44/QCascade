@@ -35,12 +35,25 @@ class OptionsConfig(BaseModel):
     round_parameter: int = 0
     force_pass_external_inputs: bool = False
 
+class PerReachCSV(BaseModel):
+    reach_idx: int
+    path: str
+
+class ExternalInputsConfig(BaseModel):
+    dir: Optional[str] = None
+    csv_files: Optional[List[str]] = None
+    tensor_npy: Optional[str] = None
+    per_reach_csvs: Optional[List[PerReachCSV]] = None
+    grain_unit: str = "mm"
+    default_sigma_g: float = 1.6
+
 class DCascadeConfig(BaseModel):
     paths: PathsConfig
     sediment: SedimentConfig
     time: TimeConfig
     physics: PhysicsConfig
     options: OptionsConfig
+    external_inputs: Optional[ExternalInputsConfig] = None
 
     def to_json(self, filepath):
         with open(filepath, 'w') as f:

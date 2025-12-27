@@ -217,6 +217,56 @@ def build_external_inputs_from_csv(
 
     return ext
 
+def build_external_inputs_from_csv_for_reach(
+    system,
+    csv_path: Path,
+    reach_idx: int,
+    default_sigma_g: float = 1.6,
+    grain_unit: str = "mm",
+) -> np.ndarray:
+    """
+    @brief Build external_inputs array from a CSV, forcing all rows to apply to a given reach.
+    @details Ignores any reach_idx present in the CSV and assigns provided reach_idx.
+    """
+    df = pd.read_csv(Path(csv_path))
+    required_cols = {"time_idx", "D50"}
+    if not required_cols.issubset(df.columns):
+        raise ValueError(f"CSV must contain columns: {sorted(required_cols)}")
+    if ("volume_m3" not in df.columns) and ("flux_m3_per_s" not in df.columns):
+        raise ValueError("CSV must contain either 'volume_m3' or 'flux_m3_per_s'")
+
+    ext = np.zeros((system.timescale, system.n_reaches, system.n_classes), dtype=float)
+    psi = np.array(system.psi, dtype=float)
+    unit_scale = _unit_scale(grain_unit)
+
+    for _, row in df.iterrows():
+        t = int(row["time_idx"])
+        r = int(reach_idx)
+        if not (0 <= t < system.timescale):
+            raise IndexError(f"time_idx {t} out of bounds [0,{system.timescale})")
+        if not (0 <= r < system.n_reaches):
+            raise IndexError(f"reach_idx {r} out of bounds [0,{system.n_reaches})")
+
+        row_mm = row.copy()
+        for col in ["D16", "D25", "D35", "D50", "D65", "D75", "D84"]:
+            if col in row_mm and pd.notna(row_mm[col]):
+                row_mm[col] = float(row_mm[col]) * unit_scale
+        mu, sigma_ln = _fit_lognormal_mu_sigma_ln(row_mm, default_sigma_g)
+        fracs = _fractions_from_lognormal(psi, mu, sigma_ln)
+
+        vol_val = row.get("volume_m3")
+        flux_val = row.get("flux_m3_per_s")
+        if pd.notna(vol_val):
+            vol_t = float(vol_val)
+        elif pd.notna(flux_val):
+            vol_t = float(flux_val) * float(system.ts_length)
+        else:
+            raise ValueError("Row must contain either volume_m3 or flux_m3_per_s")
+        vol_t = max(vol_t, 0.0)
+        ext[t, r, :] += vol_t * fracs
+
+    return ext
+
 
 def build_external_inputs_from_dir(
     system,

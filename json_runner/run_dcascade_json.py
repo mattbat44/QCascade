@@ -19,6 +19,7 @@ from validate_config import validate_config
 from external_inputs_builder import (
     build_external_inputs_from_csv,
     build_external_inputs_from_dir,
+    build_external_inputs_from_csv_for_reach,
 )
 
 def run_simulation(config_path):
@@ -150,6 +151,21 @@ def run_simulation(config_path):
                 csv_path = (base_dir / rel).resolve()
                 external_inputs_tensor += build_external_inputs_from_csv(
                     stub, csv_path, default_sigma_g=default_sigma_g, grain_unit=grain_unit
+                )
+
+        # Per-reach CSV mappings (list of {"reach_idx": int, "path": str})
+        per_reach = external_inputs_cfg.get('per_reach_csvs', [])
+        if per_reach:
+            if external_inputs_tensor is None:
+                external_inputs_tensor = np.zeros((stub.timescale, stub.n_reaches, stub.n_classes), dtype=float)
+            for item in per_reach:
+                try:
+                    r_idx = int(item['reach_idx'])
+                    pth = (base_dir / item['path']).resolve()
+                except Exception:
+                    continue
+                external_inputs_tensor += build_external_inputs_from_csv_for_reach(
+                    stub, pth, r_idx, default_sigma_g=default_sigma_g, grain_unit=grain_unit
                 )
 
         # Load precomputed tensor if provided

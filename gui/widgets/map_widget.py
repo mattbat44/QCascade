@@ -1,15 +1,11 @@
-import io
 import json
 from pathlib import Path
-from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
-    QDockWidget, QVBoxLayout, QWidget, QMessageBox, 
-    QHBoxLayout, QPushButton, QToolBar, QMenu
+    QDockWidget, QVBoxLayout, QWidget, QMessageBox,
+    QHBoxLayout, QPushButton, QMenu, QFileDialog, QGraphicsView, QGraphicsScene
 )
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QAction
-import folium
-from folium.plugins import Draw
+from PyQt6.QtCore import pyqtSignal, Qt, QPointF
+from PyQt6.QtGui import QPen, QColor, QPainterPath
 import geopandas as gpd
 import pandas as pd
 
@@ -29,8 +25,16 @@ class MapWidget(QDockWidget):
         # Toolbar for map actions
         self.create_toolbar()
         
-        self.web_view = QWebEngineView()
-        self.layout.addWidget(self.web_view)
+        # Graphics view for Qt-based GIS rendering
+        self.scene = QGraphicsScene(self)
+        self.view = QGraphicsView(self.scene)
+        self.view.setRenderHints(self.view.renderHints())
+        self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.view.setMouseTracking(True)
+        self.view.viewport().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.view.viewport().customContextMenuRequested.connect(self.on_context_menu)
+        self.view.mousePressEvent = self.on_mouse_press
+        self.layout.addWidget(self.view)
         
         self.setWidget(self.container)
         
@@ -39,9 +43,11 @@ class MapWidget(QDockWidget):
         self.shapefile_path = None
         self.selected_reach_id = None
         self.reach_names = {}  # Dictionary to store custom reach names
+        # External inputs mapping: {reach_idx: [csv_paths]}
+        self.external_inputs_mapping = {}
         
-        # Initialize with a default map
-        self.init_map()
+        # Initialize empty scene
+        self.refresh_map()
 
     def create_toolbar(self):
         """Create toolbar with map actions."""
@@ -67,22 +73,8 @@ class MapWidget(QDockWidget):
         
         self.layout.addWidget(toolbar_widget)
     
-    def init_map(self):
-        """Initialize an empty map centered on a default location."""
-        m = folium.Map(
-            location=[45.0, 10.0], 
-            zoom_start=5, 
-            tiles="OpenStreetMap",
-            prefer_canvas=True
-        )
-        self.set_map(m)
-
-    def set_map(self, m):
-        """Render a folium map in the web view."""
-        data = io.BytesIO()
-        m.save(data, close_file=False)
-        html = data.getvalue().decode()
-        self.web_view.setHtml(html)
+    def clear_scene(self):
+        self.scene.clear()
 
     def load_shapefile(self, shp_path):
         """Load a shapefile and display it on the map."""
@@ -101,88 +93,68 @@ class MapWidget(QDockWidget):
             if not self.gdf.crs:
                 self.gdf.set_crs("EPSG:4326", inplace=True)
 
-            # Reproject to WGS84 (EPSG:4326) for Folium if needed
+            # Reproject to WGS84 (EPSG:4326) for display if needed
             if self.gdf.crs.to_string() != "EPSG:4326":
                 self.gdf = self.gdf.to_crs("EPSG:4326")
             
+            # Load external inputs mapping if available
+            self.load_external_inputs_mapping()
             self.render_map()
             
         except Exception as e:
             QMessageBox.critical(self, "Error Loading Shapefile", str(e))
     
     def render_map(self):
-        """Render the current geodataframe on the map."""
-        if self.gdf is None:
+        """Render the current geodataframe onto the QGraphicsScene."""
+        self.clear_scene()
+        if self.gdf is None or self.gdf.empty:
             return
-        
-        # Calculate center
-        center_lat = self.gdf.geometry.centroid.y.mean()
-        center_lon = self.gdf.geometry.centroid.x.mean()
-        
-        m = folium.Map(
-            location=[center_lat, center_lon], 
-            zoom_start=10, 
-            tiles="OpenStreetMap",
-            prefer_canvas=True
-        )
-        
-        # Create tooltip fields including names
-        tooltip_fields = ['FromN', 'ToN', 'Length', 'Slope', 'W', 'D50', 'Name']
-        tooltip_fields = [f for f in tooltip_fields if f in self.gdf.columns]
-        
-        # Add the GeoJSON to the map with improved styling
-        def style_function(feature):
-            from_n = feature['properties'].get('FromN', None)
-            if from_n == self.selected_reach_id:
-                return {'color': 'red', 'weight': 5, 'opacity': 0.8}
-            return {'color': '#1f77b4', 'weight': 3, 'opacity': 0.7}
-        
-        def highlight_function(feature):
-            return {'color': 'yellow', 'weight': 5, 'opacity': 1}
-        
-        geojson = folium.GeoJson(
-            self.gdf,
-            name="River Network",
-            style_function=style_function,
-            highlight_function=highlight_function,
-            tooltip=folium.GeoJsonTooltip(
-                fields=tooltip_fields,
-                aliases=[f.replace('_', ' ').title() + ':' for f in tooltip_fields],
-                sticky=False
-            )
-        )
-        geojson.add_to(m)
-        
-        # Add reach labels if names are provided
-        for idx, row in self.gdf.iterrows():
-            if row.get('Name', ''):
-                centroid = row.geometry.centroid
-                folium.Marker(
-                    location=[centroid.y, centroid.x],
-                    icon=folium.DivIcon(html=f'''
-                        <div style="
-                            font-size: 10px; 
-                            color: white; 
-                            background-color: rgba(0,0,0,0.7); 
-                            padding: 2px 5px; 
-                            border-radius: 3px;
-                            white-space: nowrap;
-                        ">
-                            {row['Name']}
-                        </div>
-                    ''')
-                ).add_to(m)
-        
-        folium.LayerControl().add_to(m)
-        
-        self.set_map(m)
+        # Determine bounds
+        xs = []
+        ys = []
+        for geom in self.gdf.geometry:
+            for x, y in geom.coords:
+                xs.append(x)
+                ys.append(y)
+        if not xs or not ys:
+            return
+        minx, maxx = min(xs), max(xs)
+        miny, maxy = min(ys), max(ys)
+        dx = max(maxx - minx, 1e-9)
+        dy = max(maxy - miny, 1e-9)
+        # Simple scaling to view coordinates
+        width = 1000.0
+        height = 600.0
+        sx = width / dx
+        sy = -height / dy  # invert Y for screen
+        tx = -minx * sx
+        ty = maxy * (-sy)
+
+        # Draw reaches
+        self.items_by_reach = {}
+        for _, row in self.gdf.iterrows():
+            geom = row.geometry
+            from_n = int(row['FromN']) if 'FromN' in row else None
+            if geom is None or from_n is None:
+                continue
+            pts = [QPointF(x * sx + tx, y * sy + ty) for x, y in geom.coords]
+            # Create polyline
+            pen = QPen(QColor('#1f77b4'), 3)
+            if self.selected_reach_id == from_n:
+                pen = QPen(QColor('red'), 5)
+            if not pts:
+                continue
+            path = QPainterPath(pts[0])
+            for p in pts[1:]:
+                path.lineTo(p)
+            item = self.scene.addPath(path, pen)
+            item.setData(0, from_n)
+            self.items_by_reach[from_n] = item
+        self.view.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
     
     def refresh_map(self):
         """Refresh the map display."""
-        if self.gdf is not None:
-            self.render_map()
-        else:
-            self.init_map()
+        self.render_map()
     
     def edit_selected_reach(self):
         """Open dialog to edit the selected reach."""
@@ -229,6 +201,42 @@ class MapWidget(QDockWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to update reach: {str(e)}")
+
+    def on_mouse_press(self, event):
+        pos = self.view.mapToScene(event.pos())
+        # Find nearest item by boundingRect contains
+        found = None
+        for from_n, item in self.items_by_reach.items():
+            if item.boundingRect().translated(item.pos()).contains(pos):
+                found = from_n
+                break
+        if found is not None:
+            self.selected_reach_id = found
+            self.render_map()
+        # call base behavior for panning
+        return QGraphicsView.mousePressEvent(self.view, event)
+
+    def on_context_menu(self, pos):
+        # Context menu relative to viewport
+        menu = QMenu(self)
+        edit_action = menu.addAction("Edit Selected Reach")
+        attach_action = menu.addAction("Attach External Input CSV...")
+        action = menu.exec(self.view.viewport().mapToGlobal(pos))
+        if action == edit_action:
+            self.edit_selected_reach()
+        elif action == attach_action:
+            self.attach_external_csv()
+
+    def attach_external_csv(self):
+        if self.selected_reach_id is None:
+            QMessageBox.warning(self, "No Selection", "Select a reach first.")
+            return
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select External Input CSV", "", "CSV Files (*.csv)")
+        if not file_path:
+            return
+        self.external_inputs_mapping.setdefault(int(self.selected_reach_id), []).append(file_path)
+        self.save_external_inputs_mapping()
+        QMessageBox.information(self, "Attached", f"Attached CSV to reach {self.selected_reach_id}.")
     
     def save_shapefile(self):
         """Save the modified geodataframe back to shapefile."""
@@ -283,3 +291,39 @@ class MapWidget(QDockWidget):
                 json.dump(self.reach_names, f, indent=2)
         except Exception as e:
             print(f"Warning: Could not save reach names: {e}")
+
+    def load_external_inputs_mapping(self):
+        if self.shapefile_path is None:
+            return
+        mapping_file = Path(self.shapefile_path).parent / 'external_inputs_mapping.json'
+        if mapping_file.exists():
+            try:
+                with open(mapping_file, 'r') as f:
+                    self.external_inputs_mapping = json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not load external inputs mapping: {e}")
+
+    def save_external_inputs_mapping(self):
+        if self.shapefile_path is None:
+            return
+        mapping_file = Path(self.shapefile_path).parent / 'external_inputs_mapping.json'
+        try:
+            with open(mapping_file, 'w') as f:
+                json.dump(self.external_inputs_mapping, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save external inputs mapping: {e}")
+
+    def get_external_inputs_config(self):
+        """Return external inputs configuration compatible with JSON runner."""
+        if not self.external_inputs_mapping:
+            return None
+        per_reach = []
+        for reach_str, paths in self.external_inputs_mapping.items():
+            reach_idx = int(reach_str)
+            for p in paths:
+                per_reach.append({"reach_idx": reach_idx, "path": p})
+        return {
+            "per_reach_csvs": per_reach,
+            "grain_unit": "mm",
+            "default_sigma_g": 1.6
+        }

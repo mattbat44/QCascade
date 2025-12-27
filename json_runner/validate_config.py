@@ -59,6 +59,7 @@ def validate_config(config):
             "csv_files": {"type": list, "required": False, "description": "List of CSV files for per-reach external inputs"},
             "dir": {"type": str, "required": False, "description": "Directory containing per-reach CSVs (one file per reach)"},
             "tensor_npy": {"type": str, "required": False, "description": "Path to a precomputed external_inputs .npy tensor"},
+            "per_reach_csvs": {"type": list, "required": False, "description": "List of objects {reach_idx:int, path:str} specifying CSVs attached to specific reaches"},
             "grain_unit": {"type": str, "required": False, "default": "mm", "description": "Units for D-quantiles: 'mm' or 'm'"},
             "default_sigma_g": {"type": (int, float), "required": False, "default": 1.6, "description": "Geometric std dev fallback when only D50 provided"}
         }
@@ -123,6 +124,14 @@ def validate_config(config):
         if "csv_files" in ext:
             if not isinstance(ext["csv_files"], list) or not all(isinstance(x, str) for x in ext["csv_files"]):
                 print("Error: 'external_inputs.csv_files' must be a list of strings.", file=sys.stderr)
+                is_valid = False
+        # Ensure per_reach_csvs is a list of {reach_idx, path}
+        if "per_reach_csvs" in ext:
+            ok = isinstance(ext["per_reach_csvs"], list) and all(
+                isinstance(el, dict) and "reach_idx" in el and "path" in el for el in ext["per_reach_csvs"]
+            )
+            if not ok:
+                print("Error: 'external_inputs.per_reach_csvs' must be a list of objects with 'reach_idx' and 'path'.", file=sys.stderr)
                 is_valid = False
         # Ensure grain_unit is among allowed values if present
         if "grain_unit" in ext and ext["grain_unit"] not in ["mm", "m"]:
