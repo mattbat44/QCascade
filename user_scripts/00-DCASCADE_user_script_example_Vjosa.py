@@ -52,14 +52,17 @@ from widget import read_user_input
 
 #--------------------1) Pathes
 
+# Get the directory of the current script
+script_dir = Path(__file__).parent
+
 #---River shape files
-path_river_network = Path('../inputs/input_trial/')
+path_river_network = script_dir / '../inputs/input_trial/'
 # Reach data file (shp, but can also be a csv)
 name_river_network = 'River_Network.shp'
 filename_river_network = path_river_network / name_river_network
 
 #---Discharge files
-path_q = Path('../inputs/input_trial/')
+path_q = script_dir / '../inputs/input_trial/'
 # csv file that specifies the water flows in m3/s as a (nxm) matrix, where n = number of time steps; m = number of reaches (equal to the one specified in the river network)
 name_q = 'Q_Vjosa.csv'
 filename_q = path_q / name_q
@@ -104,7 +107,7 @@ save_dep_layer = 'never' # options: 'yearly', 'always', 'never'.  Choose when to
 save_extended = True
 
 #---Option to display dynamic output plots at the end
-dynamic_display = False
+dynamic_display = True
 
 
 #-------------------3) List of optional defined parameters of the simulation
@@ -248,7 +251,7 @@ data_output, extended_output = DCASCADE_main(reach_data, network, Q, psi, timesc
 ################ SAVE OUTPUTS ###############
 import pickle
 
-path_results = Path("../cascade_results/")
+path_results = script_dir / "../cascade_results/"
 if not os.path.exists(path_results):
     os.makedirs(path_results)
 
