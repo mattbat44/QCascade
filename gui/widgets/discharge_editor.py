@@ -22,7 +22,7 @@ class DischargeEditor(QDockWidget):
     discharge_updated = pyqtSignal(str)  # Emits path to updated discharge file
     
     def __init__(self, parent=None):
-        super().__init__("Discharge Data Editor", parent)
+        super().__init__("Discharge", parent)
         
         self.container = QWidget()
         self.layout = QVBoxLayout(self.container)

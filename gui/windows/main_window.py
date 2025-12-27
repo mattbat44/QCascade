@@ -58,18 +58,28 @@ class MainWindow(QMainWindow):
     def add_dock_widgets(self):
         # --- Configuration Docks ---
         self.paths_dock = PathsDock(self)
+        self.paths_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                     QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.paths_dock)
         
         self.physics_dock = PhysicsDock(self)
+        self.physics_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                       QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.physics_dock)
         
         self.sediment_dock = SedimentDock(self)
+        self.sediment_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                        QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sediment_dock)
         
         self.time_dock = TimeDock(self)
+        self.time_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                    QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.time_dock)
         
         self.options_dock = OptionsDock(self)
+        self.options_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                       QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.options_dock)
         
         # Tabify config docks
@@ -81,18 +91,26 @@ class MainWindow(QMainWindow):
         
         # --- GIS Map ---
         self.map_widget = MapWidget(self)
+        self.map_widget.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                     QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.map_widget)
         
         # --- Discharge Editor ---
         self.discharge_editor = DischargeEditor(self)
+        self.discharge_editor.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                          QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.discharge_editor)
         
         # --- Results Viewer ---
         self.results_viewer = ResultsViewer(self)
+        self.results_viewer.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                        QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.results_viewer)
         
         # --- Plots (legacy, kept for compatibility) ---
         self.plot_widget = PlotWidget(self)
+        self.plot_widget.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                      QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.plot_widget)
         
         # Tabify all right-side widgets
@@ -102,7 +120,9 @@ class MainWindow(QMainWindow):
         self.map_widget.raise_()
         
         # --- Logs ---
-        self.log_dock = QDockWidget("Simulation Logs", self)
+        self.log_dock = QDockWidget("Logs", self)
+        self.log_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | 
+                                   QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_dock.setWidget(self.log_text)

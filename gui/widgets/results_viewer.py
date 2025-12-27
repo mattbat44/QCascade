@@ -23,7 +23,7 @@ class ResultsViewer(QDockWidget):
     """Advanced results viewer with multiple visualization options."""
     
     def __init__(self, parent=None):
-        super().__init__("Results Analysis", parent)
+        super().__init__("Results", parent)
         
         self.container = QWidget()
         self.main_layout = QVBoxLayout(self.container)

@@ -20,7 +20,7 @@ class MapWidget(QDockWidget):
     reach_edited = pyqtSignal(int, dict)  # Signal emitted when reach is edited (FromN, updated_data)
     
     def __init__(self, parent=None):
-        super().__init__("GIS Viewer", parent)
+        super().__init__("Map", parent)
         
         self.container = QWidget()
         self.layout = QVBoxLayout(self.container)

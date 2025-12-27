@@ -8,7 +8,7 @@ class PathsDock(QDockWidget):
     shapefile_selected = pyqtSignal(str)
 
     def __init__(self, parent=None):
-        super().__init__("Input Files", parent)
+        super().__init__("Inputs", parent)
         self.container = QWidget()
         self.layout = QFormLayout(self.container)
         
@@ -67,7 +67,7 @@ class PathsDock(QDockWidget):
 
 class PhysicsDock(QDockWidget):
     def __init__(self, parent=None):
-        super().__init__("Physics Parameters", parent)
+        super().__init__("Physics", parent)
         self.container = QWidget()
         self.layout = QFormLayout(self.container)
         
@@ -140,7 +140,7 @@ class PhysicsDock(QDockWidget):
 
 class SedimentDock(QDockWidget):
     def __init__(self, parent=None):
-        super().__init__("Sediment Parameters", parent)
+        super().__init__("Sediment", parent)
         self.container = QWidget()
         self.layout = QFormLayout(self.container)
         
@@ -185,7 +185,7 @@ class SedimentDock(QDockWidget):
 
 class TimeDock(QDockWidget):
     def __init__(self, parent=None):
-        super().__init__("Time Parameters", parent)
+        super().__init__("Time", parent)
         self.container = QWidget()
         self.layout = QFormLayout(self.container)
         

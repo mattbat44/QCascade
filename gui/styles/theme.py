@@ -9,12 +9,21 @@ QMainWindow {
     background-color: #f5f5f5;
 }
 
+QDockWidget {
+    titlebar-close-icon: none;
+}
+
 QDockWidget::title {
     text-align: left;
     background-color: #2c3e50;
-    color: white;
+    color: #ecf0f1;
     padding: 5px;
     font-size: 11pt;
+}
+
+QDockWidget::close-button {
+    image: none;
+    background: transparent;
 }
 
 QPushButton {
@@ -45,6 +54,15 @@ QToolBar {
     border: none;
     spacing: 3px;
     padding: 3px;
+}
+
+QToolBar QLabel {
+    color: #ecf0f1;
+    font-size: 10pt;
+}
+
+QToolBar QPushButton {
+    color: #ecf0f1;
 }
 
 QLabel {
@@ -86,7 +104,7 @@ QTableWidget::item:selected {
 
 QHeaderView::section {
     background-color: #34495e;
-    color: white;
+    color: #ecf0f1;
     padding: 5px;
     border: none;
     font-weight: bold;
@@ -129,21 +147,42 @@ QTabWidget::pane {
 QTabBar::tab {
     background-color: #ecf0f1;
     color: #2c3e50;
-    padding: 8px 12px;
+    padding: 10px 16px;
     border: 1px solid #bdc3c7;
     border-bottom: none;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
+    max-width: 120px;
 }
 
 QTabBar::tab:selected {
     background-color: white;
     color: #3498db;
     font-weight: bold;
+    padding: 12px 20px;
+    margin-bottom: -2px;
 }
 
 QTabBar::tab:hover {
     background-color: #d5dbdb;
+}
+
+QStatusBar {
+    background-color: #34495e;
+    color: #ecf0f1;
+}
+
+QMenuBar {
+    background-color: #34495e;
+    color: #ecf0f1;
+}
+
+QMenuBar::item {
+    color: #ecf0f1;
+}
+
+QMenuBar::item:selected {
+    background-color: #2c3e50;
 }
 """
 
