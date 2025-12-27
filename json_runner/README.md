@@ -32,5 +32,55 @@ The JSON file is divided into sections:
 - `time`: Simulation duration and time step.
 - `physics`: Model physics options (transport formulas, flow depth, etc.).
 - `options`: Output and execution options.
+- `external_inputs` (optional): Define lateral sediment sources via simple CSVs.
+
+### External Inputs Section
+
+You can provide external inputs in two ways:
+
+- `dir`: A directory containing per‑reach CSV files (one file per reach). If a CSV lacks a `reach_idx` column, the reach index is inferred from its filename by the first integer (e.g., `reach_3.csv` → reach 3).
+- `csv_files`: A list of CSV files to aggregate. Each file may contain multiple rows across times and reaches.
+- `tensor_npy`: A precomputed `.npy` tensor with shape `(timescale, n_reaches, n_classes)`; can be produced by the generator tool below.
+
+Optional fields:
+- `grain_unit`: `'mm'` (default) or `'m'` for the D‑quantile units.
+- `default_sigma_g`: Fallback geometric std dev (default `1.6`) when only `D50` is provided.
+
+CSV schema (columns):
+- Required: `time_idx`, `D50`, and either `volume_m3` or `flux_m3_per_s`
+- Optional: `reach_idx` (omit when using per‑reach files and filename inference)
+- Optional quantile pairs to constrain spread: `D16/D84` or `D25/D75` or `D35/D65`
+
+Example `external_inputs` in config:
+
+```json
+{
+    "external_inputs": {
+        "dir": "../inputs/external_inputs_example/",
+        "grain_unit": "mm",
+        "default_sigma_g": 1.6
+    }
+}
+```
+
+### Generate a Reusable Tensor
+
+Use the helper to generate and save a `.npy` external_inputs tensor:
+
+```bash
+uv run python json_runner/generate_external_inputs.py path/to/config.json --dir path/to/ext_dir 
+# Or combine multiple files
+uv run python json_runner/generate_external_inputs.py path/to/config.json --csv path/to/a.csv --csv path/to/b.csv --out external_inputs.npy
+```
+
+Then reference it in your config:
+
+```json
+{
+    "external_inputs": {
+        "tensor_npy": "external_inputs.npy"
+    }
+}
+```
 
 See `validate_config.py` or run `python validate_config.py` (without arguments) for a full description of allowed values.

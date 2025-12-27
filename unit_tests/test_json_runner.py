@@ -158,6 +158,84 @@ def test_Vjosa_Wilcock_json():
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+def test_Vjosa_json_with_external_inputs(tmp_path):
+    """
+    Run JSON runner with and without external inputs and ensure outputs differ.
+    """
+
+    # Prepare an external inputs directory with minimal CSVs
+    ext_dir = tmp_path / 'ext_inputs'
+    ext_dir.mkdir()
+    # Reach 0, t=0: 100 m3 with D50=2mm
+    (ext_dir / 'reach_0.csv').write_text('time_idx,D50,volume_m3\n0,2.0,100.0\n')
+    # Reach 3, t=5: flux row
+    (ext_dir / 'reach_3.csv').write_text('time_idx,D50,flux_m3_per_s\n5,3.0,0.005\n')
+
+    # Base configuration
+    base_config = {
+        "paths": {
+            "river_network_shp": str(INPUTS_DIR / 'River_Network.shp'),
+            "discharge_csv": str(INPUTS_DIR / 'Q_Vjosa.csv'),
+            "output_name": "Vjosa_json_external_inputs_test"
+        },
+        "sediment": {
+            "range": [-8, 5],
+            "n_classes": 6,
+            "deposit_layer_thickness": 100000,
+            "active_layer_depth": "2D90",
+            "active_layer_method": 2
+        },
+        "time": {
+            "timescale": 20,
+            "ts_length": 86400
+        },
+        "physics": {
+            "transport_capacity_formula": 3,
+            "transport_partitioning": 2,
+            "flow_depth_formula": 1,
+            "velocity_formula": 2,
+            "velocity_partitioning": 1,
+            "slope_reduction": 1,
+            "width_calculation": 1,
+            "update_slope": False,
+            "velocity_height": "2D90",
+            "erosion_max": 1
+        },
+        "options": {
+            "save_deposit_layer": "never",
+            "round_parameter": 0,
+            "force_pass_external_inputs": False
+        }
+    }
+
+    # Run baseline
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp:
+        json.dump(base_config, tmp)
+        tmp_path_base = tmp.name
+    try:
+        data_base, _ = run_simulation(tmp_path_base)
+    finally:
+        if os.path.exists(tmp_path_base):
+            os.remove(tmp_path_base)
+
+    # Run with external inputs
+    config_ext = dict(base_config)
+    config_ext["external_inputs"] = {
+        "dir": str(ext_dir)
+    }
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp:
+        json.dump(config_ext, tmp)
+        tmp_path_ext = tmp.name
+    try:
+        data_ext, _ = run_simulation(tmp_path_ext)
+    finally:
+        if os.path.exists(tmp_path_ext):
+            os.remove(tmp_path_ext)
+
+    base_in_sum = np.sum(data_base['Volume in [m^3]'], axis=0)
+    ext_in_sum = np.sum(data_ext['Volume in [m^3]'], axis=0)
+    assert not np.allclose(base_in_sum, ext_in_sum), "External inputs should change delivered volumes"
+
 if __name__ == "__main__":
     test_Vjosa_Engelund_json()
     test_Vjosa_Wilcock_json()

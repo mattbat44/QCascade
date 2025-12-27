@@ -31,5 +31,10 @@
     "save_deposit_layer": "never",
     "round_parameter": 0,
     "force_pass_external_inputs": false
+  },
+  "external_inputs": {
+    "dir": "../inputs/external_inputs_example/",
+    "grain_unit": "mm",
+    "default_sigma_g": 1.6
   }
 }

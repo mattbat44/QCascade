@@ -16,6 +16,10 @@ from reach_data import ReachData
 from preprocessing import read_network, extract_Q, check_sediment_sizes, graph_preprocessing
 from GSD_curvefit import GSDcurvefit
 from validate_config import validate_config
+from external_inputs_builder import (
+    build_external_inputs_from_csv,
+    build_external_inputs_from_dir,
+)
 
 def run_simulation(config_path):
     config_path = Path(config_path).resolve()
@@ -106,6 +110,58 @@ def run_simulation(config_path):
     for n in range(reach_data.n_reaches):
         Qbi_dep_in[n] = deposit[n] * Fi_r[n,:]
 
+    # --- External inputs (optional) ---
+    external_inputs_cfg = config.get('external_inputs')
+    external_inputs_tensor = None
+    if isinstance(external_inputs_cfg, dict):
+        # Build a lightweight system stub for the builder
+        class _SystemStub:
+            def __init__(self, timescale, n_reaches, psi, ts_length):
+                self.timescale = timescale
+                self.n_reaches = n_reaches
+                self.psi = psi
+                self.n_classes = len(psi)
+                self.ts_length = ts_length
+
+        stub = _SystemStub(
+            timescale=time['timescale'],
+            n_reaches=reach_data.n_reaches,
+            psi=psi,
+            ts_length=time['ts_length'],
+        )
+
+        grain_unit = external_inputs_cfg.get('grain_unit', 'mm')
+        default_sigma_g = external_inputs_cfg.get('default_sigma_g', 1.6)
+
+        # Build from dir if provided
+        if 'dir' in external_inputs_cfg and external_inputs_cfg['dir']:
+            dir_path = (base_dir / external_inputs_cfg['dir']).resolve()
+            external_inputs_tensor = build_external_inputs_from_dir(
+                stub, dir_path, default_sigma_g=default_sigma_g, grain_unit=grain_unit
+            )
+
+        # Aggregate any listed CSV files
+        csv_list = external_inputs_cfg.get('csv_files', [])
+        if csv_list:
+            # Initialize accumulator if not already built
+            if external_inputs_tensor is None:
+                external_inputs_tensor = np.zeros((stub.timescale, stub.n_reaches, stub.n_classes), dtype=float)
+            for rel in csv_list:
+                csv_path = (base_dir / rel).resolve()
+                external_inputs_tensor += build_external_inputs_from_csv(
+                    stub, csv_path, default_sigma_g=default_sigma_g, grain_unit=grain_unit
+                )
+
+        # Load precomputed tensor if provided
+        if 'tensor_npy' in external_inputs_cfg and external_inputs_cfg['tensor_npy']:
+            npy_path = (base_dir / external_inputs_cfg['tensor_npy']).resolve()
+            tensor = np.load(npy_path)
+            if external_inputs_tensor is None:
+                external_inputs_tensor = tensor
+            else:
+                # Sum with any other sources
+                external_inputs_tensor = external_inputs_tensor + tensor
+
     print("Starting simulation...")
     # Ensure roundpar is an integer (number of decimal digits)
     roundpar = int(opts.get('round_parameter', 0))
@@ -132,7 +188,7 @@ def run_simulation(config_path):
         indx_width_calc=phys.get('width_calculation', 1),
         update_slope=phys.get('update_slope', False),
         roundpar=roundpar,
-        external_inputs=None, 
+        external_inputs=external_inputs_tensor, 
         force_pass_external_inputs=opts.get('force_pass_external_inputs', False)
     )
     print("Simulation completed.")
