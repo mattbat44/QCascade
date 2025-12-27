@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QDockWidget, QVBoxLayout, QWidget
 
 class PlotWidget(QDockWidget):
     def __init__(self, parent=None):
-        super().__init__("Results Analysis", parent)
+        super().__init__("Plot", parent)
         
         self.container = QWidget()
         self.layout = QVBoxLayout(self.container)
