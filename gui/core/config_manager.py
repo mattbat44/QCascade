@@ -5,6 +5,7 @@ class PathsConfig(BaseModel):
     river_network_shp: str
     discharge_csv: str
     output_name: str
+    output_dir: Optional[str] = None
 
 class SedimentConfig(BaseModel):
     range: List[float] = Field(..., min_items=2, max_items=2)
@@ -31,7 +32,7 @@ class PhysicsConfig(BaseModel):
 
 class OptionsConfig(BaseModel):
     save_deposit_layer: Literal["yearly", "always", "never"] = "never"
-    round_parameter: float = 0
+    round_parameter: int = 0
     force_pass_external_inputs: bool = False
 
 class DCascadeConfig(BaseModel):
@@ -43,4 +44,4 @@ class DCascadeConfig(BaseModel):
 
     def to_json(self, filepath):
         with open(filepath, 'w') as f:
-            f.write(self.json(indent=4))
+            f.write(self.model_dump_json(indent=4))

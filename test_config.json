@@ -1,26 +1,26 @@
 {
     "paths": {
-        "river_network_shp": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/River_Network.shp",
-        "discharge_csv": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/Q_Vjosa.csv",
-        "output_name": "simulation_output"
+        "river_network_shp": "a",
+        "discharge_csv": "b",
+        "output_name": "c"
     },
     "sediment": {
         "range": [
-            -8.0,
-            5.0
+            -1.0,
+            1.0
         ],
-        "n_classes": 6,
-        "deposit_layer_thickness": 100000.0,
-        "active_layer_depth": 0.3,
+        "n_classes": 1,
+        "deposit_layer_thickness": 1.0,
+        "active_layer_depth": 1.0,
         "active_layer_method": 1
     },
     "time": {
-        "timescale": 20,
-        "ts_length": 86400.0
+        "timescale": 1,
+        "ts_length": 1.0
     },
     "physics": {
-        "transport_capacity_formula": 2,
-        "transport_partitioning": 4,
+        "transport_capacity_formula": 1,
+        "transport_partitioning": 1,
         "flow_depth_formula": 1,
         "velocity_formula": 2,
         "velocity_partitioning": 1,

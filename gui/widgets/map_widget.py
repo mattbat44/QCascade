@@ -38,8 +38,12 @@ class MapWidget(QDockWidget):
         try:
             gdf = gpd.read_file(shp_path)
             
+            # Set default CRS to WGS84 if missing
+            if not gdf.crs:
+                gdf.set_crs("EPSG:4326", inplace=True)
+
             # Reproject to WGS84 (EPSG:4326) for Folium if needed
-            if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
+            if gdf.crs.to_string() != "EPSG:4326":
                 gdf = gdf.to_crs("EPSG:4326")
             
             # Calculate center

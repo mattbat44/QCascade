@@ -4,6 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import pickle
 
 # Add src to path
 current_dir = Path(__file__).parent
@@ -106,6 +107,9 @@ def run_simulation(config_path):
         Qbi_dep_in[n] = deposit[n] * Fi_r[n,:]
 
     print("Starting simulation...")
+    # Ensure roundpar is an integer (number of decimal digits)
+    roundpar = int(opts.get('round_parameter', 0))
+
     data_output, extended_output = DCASCADE_main(
         reach_data=reach_data,
         network=network,
@@ -127,12 +131,35 @@ def run_simulation(config_path):
         indx_slope_red=phys.get('slope_reduction', 1),
         indx_width_calc=phys.get('width_calculation', 1),
         update_slope=phys.get('update_slope', False),
-        roundpar=opts.get('round_parameter', 0),
+        roundpar=roundpar,
         external_inputs=None, 
         force_pass_external_inputs=opts.get('force_pass_external_inputs', False)
     )
     print("Simulation completed.")
-    
+
+    # Save outputs to a logical destination. Prefer `paths.output_dir` if provided,
+    # otherwise use the default `cascade_results` folder next to the config file.
+    output_dir_cfg = paths.get('output_dir') if isinstance(paths, dict) else None
+    if output_dir_cfg:
+        results_dir = (base_dir / Path(output_dir_cfg)).resolve()
+    else:
+        results_dir = base_dir / 'cascade_results'
+
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    # Primary output
+    name_file = results_dir / Path(str(output_name) + '.p')
+    with open(name_file, 'wb') as fh:
+        pickle.dump(data_output, fh)
+    print(f"Saved results to {name_file}")
+
+    # Extended output if present
+    if extended_output is not None:
+        name_file_ext = results_dir / Path(str(output_name) + '_ext.p')
+        with open(name_file_ext, 'wb') as fh:
+            pickle.dump(extended_output, fh)
+        print(f"Saved extended results to {name_file_ext}")
+
     return data_output, extended_output
 
 if __name__ == "__main__":

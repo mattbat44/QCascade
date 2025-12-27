@@ -36,6 +36,16 @@ class PathsDock(QDockWidget):
         self.output_name = QLineEdit("simulation_output")
         self.output_name.setToolTip("Name of the output simulation files.")
         self.layout.addRow("Output Name:", self.output_name)
+
+        # Output Directory
+        self.output_dir = QLineEdit()
+        self.output_dir.setToolTip("Directory to save simulation outputs (optional). If empty, a cascade_results folder next to the config will be used.")
+        self.output_dir_btn = QPushButton("Browse...")
+        self.output_dir_btn.clicked.connect(self.browse_output_dir)
+        out_layout = QHBoxLayout()
+        out_layout.addWidget(self.output_dir)
+        out_layout.addWidget(self.output_dir_btn)
+        self.layout.addRow("Output Directory:", out_layout)
         
         self.setWidget(self.container)
 
@@ -49,6 +59,11 @@ class PathsDock(QDockWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Select Discharge CSV", "", "CSV Files (*.csv)")
         if path:
             self.csv_path.setText(path)
+
+    def browse_output_dir(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Output Directory", "")
+        if path:
+            self.output_dir.setText(path)
 
 class PhysicsDock(QDockWidget):
     def __init__(self, parent=None):

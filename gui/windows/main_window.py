@@ -124,15 +124,22 @@ class MainWindow(QMainWindow):
         paths = PathsConfig(
             river_network_shp=self.paths_dock.shp_path.text(),
             discharge_csv=self.paths_dock.csv_path.text(),
-            output_name=self.paths_dock.output_name.text()
+            output_name=self.paths_dock.output_name.text(),
+            output_dir=self.paths_dock.output_dir.text() or None
         )
         
         # Sediment
+        al_depth_text = self.sediment_dock.act_layer.text()
+        try:
+            al_depth_val = float(al_depth_text)
+        except ValueError:
+            al_depth_val = al_depth_text
+
         sediment = SedimentConfig(
             range=[self.sediment_dock.min_phi.value(), self.sediment_dock.max_phi.value()],
             n_classes=self.sediment_dock.n_classes.value(),
             deposit_layer_thickness=self.sediment_dock.dep_layer.value(),
-            active_layer_depth=self.sediment_dock.act_layer.text(), # Need to handle float conversion if needed
+            active_layer_depth=al_depth_val,
             active_layer_method=1 # Fixed for now or add widget
         )
         
@@ -163,7 +170,7 @@ class MainWindow(QMainWindow):
         # Options
         options = OptionsConfig(
             save_deposit_layer=self.options_dock.save_dep.currentText(),
-            round_parameter=self.options_dock.round_param.value(),
+            round_parameter=int(self.options_dock.round_param.value()),
             force_pass_external_inputs=self.options_dock.force_pass.isChecked()
         )
         
