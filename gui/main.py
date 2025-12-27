@@ -7,18 +7,25 @@ project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QIcon
 from gui.windows.main_window import MainWindow
-# from qt_material import apply_stylesheet
+
+# Import stylesheet
+try:
+    from gui.styles.theme import DCASCADE_STYLESHEET
+except ImportError:
+    DCASCADE_STYLESHEET = ""
 
 def main():
     app = QApplication(sys.argv)
     
-    # Optional: Apply theme
-    # try:
-    #     from qt_material import apply_stylesheet
-    #     apply_stylesheet(app, theme='dark_teal.xml')
-    # except ImportError:
-    #     pass
+    # Set application properties
+    app.setApplicationName("D-CASCADE")
+    app.setOrganizationName("D-CASCADE Team")
+    
+    # Apply custom stylesheet
+    if DCASCADE_STYLESHEET:
+        app.setStyleSheet(DCASCADE_STYLESHEET)
     
     window = MainWindow()
     window.show()
