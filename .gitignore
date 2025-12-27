@@ -8,3 +8,5 @@ cascade_results/
 
 inputs/Input_Po_untracked
 unit_tests/test_Po_case.py
+
+src/dcascade_py_2_0_0.egg-info/
