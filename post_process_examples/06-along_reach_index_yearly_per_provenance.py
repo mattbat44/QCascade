@@ -25,15 +25,15 @@ from matplotlib import pyplot as plt
 import matplotlib.cm as cm 
 import pandas as pd
 import geopandas as gpd
-
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #---------------------Path to the extended pickle output
-path = "..\\cascade_results\\" 
+path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 name_simu_ext = 'Vjosa_test_ext'
 
 #---------------------Folder to store the plots
-figure_folder = path+'figures_all_reaches_sum\\'          # where you will store the figure
+figure_folder = os.path.join(path, 'figures_all_reaches_sum\\')          # where you will store the figure
 
 if not os.path.exists(figure_folder):       
     os.makedirs(figure_folder)

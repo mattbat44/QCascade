@@ -26,15 +26,16 @@ import geopandas as gpd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from plot_function import dynamic_plot
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #---------------------Path to the pickle output
 
-path = "..\\cascade_results\\" 
+path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 
 #---------------------Path to the input river network (.shp) or (.csv)
 
-path_river_network = "..\\inputs\\input_trial\\" #Path to the shp
+path_river_network = os.path.join(SCRIPT_DIR, "..\\inputs\\input_trial\\") #Path to the shp
 name_river_network = "River_Network.shp"
 
 

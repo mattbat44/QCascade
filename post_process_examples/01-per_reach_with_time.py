@@ -25,18 +25,18 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import geopandas as gpd
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #---------------------Path to the pickle output
-path = "..\\cascade_results\\" 
+path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 
 #---------------------Path to the input river network (.shp) or (.csv)
-path_river_network = "..\\inputs\\input_trial\\" #Path to the shp
+path_river_network = os.path.join(SCRIPT_DIR, "..\\inputs\\input_trial\\") #Path to the shp
 name_river_network = "River_Network.shp"
 
 #---------------------Folder to store the plots
-figure_folder = path+'figures_per_reach\\' # where you will store the figure
-
+figure_folder = os.path.join(path, 'figures_per_reach\\') # where you will store the figure
 if not os.path.exists(figure_folder):       
     os.makedirs(figure_folder)
        

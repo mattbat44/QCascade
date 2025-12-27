@@ -33,20 +33,19 @@ from preprocessing import extract_Q, read_network
 from reach_data import ReachData
 
 
-%matplotlib inline
-
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #---------------------Path to the extended pickle output
-path = "..\\cascade_results\\" 
+path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 name_simu_ext = 'Vjosa_test_ext'
 
 #---------------------Path to the input river network (.shp) or (.csv)
-path_river_network = "..\\inputs\\input_trial\\" #Path to the shp
+path_river_network = os.path.join(SCRIPT_DIR, "..\\inputs\\input_trial\\") #Path to the shp
 name_river_network = "River_Network.shp"
 
 #---------------------Path to the discharge file
-path_Q = "..\\inputs\\input_trial\\"
+path_Q = os.path.join(SCRIPT_DIR, "..\\inputs\\input_trial\\")
 name_q = 'Q_Vjosa.csv' 
 
 
