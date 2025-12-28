@@ -72,6 +72,7 @@ class SedimentarySystem:
         self.Qbi_tr = None
         self.Qbi_mob = None
         self.Qbi_mob_from_r = None
+        self.overbank_dep = None
         self.V_sed = None
         self.Q_out = None
         self.update_slope = None
@@ -282,6 +283,7 @@ class SedimentarySystem:
         self.Q_out = self.create_3d_zero_array()  # amount of material delivered outside the network in each timestep
         self.V_sed = self.create_3d_zero_array()  # velocities
         self.sediment_budget = self.create_3d_zero_array()
+        self.overbank_dep = self.create_3d_zero_array()  # overbank-specific deposited volumes
 
         self.tr_cap = self.create_3d_zero_array()  # transport capacity per each sediment class
 
@@ -911,8 +913,9 @@ class SedimentarySystem:
         if np.any(diff_pos):
             # Search for layers to be put in the erosion max (e_max_vol_)
             V_inc_el, V_dep_el, V_dep_not_el, _ = self.layer_search(Vdep, e_max_vol_, roundpar = roundpar)
+            overbank_dep = None
             if tr_cap_overbank is not None:
-                V_dep_el, V_dep_not_el = self.tr_cap_deposit_overbank(V_dep_el, V_dep_not_el, tr_cap_overbank, roundpar)
+                V_dep_el, V_dep_not_el, overbank_dep = self.tr_cap_deposit_overbank(V_dep_el, V_dep_not_el, tr_cap_overbank, roundpar)
 
             [V_mob, Vdep_new] = self.tr_cap_deposit(V_inc_el, V_dep_el, V_dep_not_el, diff_pos, roundpar)
 
@@ -937,6 +940,9 @@ class SedimentarySystem:
         # If the new Vdep is empty, put an empty layer for next steps
         if Vdep_new.size == 0:
             Vdep_new = self.create_volume(provenance=n)
+
+        if overbank_dep is not None:
+            self.overbank_dep[t, n, :] += np.sum(self.sediments(overbank_dep), axis=0)
 
         return V_mob, passing_cascades, Vdep_new
 
@@ -1292,6 +1298,8 @@ class SedimentarySystem:
             Mobilisable portion of V_dep2act after enforcing overbank capacity.
         @return V_dep_out
             Updated deposit layer after re-depositing excess sediment.
+        @return V_overbank_dep
+            Volume re-deposited due to overbank limitation (same shape as V_dep2act).
         """
 
         class_sup_dep = tr_cap_overbank < np.sum(self.sediments(V_dep2act), axis=0)
@@ -1361,7 +1369,7 @@ class SedimentarySystem:
         if np.sum(self.sediments(V_dep_out)) != 0:
             V_dep_out = V_dep_out[np.sum(self.sediments(V_dep_out), axis=1) != 0]
 
-        return V_dep2act_new, V_dep_out
+        return V_dep2act_new, V_dep_out, V_2dep
 
 
 

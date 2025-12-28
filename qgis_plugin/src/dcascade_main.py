@@ -34,6 +34,8 @@ def DCASCADE_main(reach_data, network, Q, psi, timescale, ts_length, al_depth,
 
                   external_inputs = None,
                   force_pass_external_inputs = False,
+                  overbank_Q = None,
+                  overbank_width = None,
                   ):
 
 
@@ -103,14 +105,12 @@ def DCASCADE_main(reach_data, network, Q, psi, timescale, ts_length, al_depth,
     dcascade.set_velocity_options(indx_velocity, indx_vel_partition, vel_height)
 
     # Run
-    dcascade.run(Q, roundpar)
+    dcascade.run(Q, roundpar, overbank_Q=overbank_Q, overbank_width=overbank_width)
 
     # Post process
     data_output, extended_output = dcascade.output_processing(Q)
 
     return data_output, extended_output
-
-
 
 
 

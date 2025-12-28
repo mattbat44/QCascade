@@ -21,6 +21,7 @@ from flow_depth import choose_flow_depth
 from sedimentary_system import SedimentarySystem
 from slope_reduction import choose_slope_reduction
 from transport_capacity_calculator import TransportCapacityCalculator
+from constants import GRAV
 from width_variation import choose_width_variation
 
 
@@ -69,7 +70,7 @@ class DSCASCADE_MAIN:
         self.vel_height_option = vel_height_option
 
 
-    def run(self, Q, roundpar, overbank_Q=None):
+    def run(self, Q, roundpar, overbank_Q=None, overbank_width=None):
 
         SedimSys = self.sedim_sys
 
@@ -85,7 +86,20 @@ class DSCASCADE_MAIN:
 
             # If an overbank discharge matrix is provided, pre-compute corresponding depths/velocities
             if overbank_Q is not None:
-                h_overbank, v_overbank = choose_flow_depth(self.reach_data, SedimSys, overbank_Q, t, self.indx_flo_depth)
+                if overbank_width is not None:
+                    width_overbank_t = overbank_width[t]
+                else:
+                    width_overbank_t = SedimSys.width[t]
+                if self.indx_flo_depth == 1:
+                    h_overbank = np.power(overbank_Q[t, :] * self.reach_data.n / (width_overbank_t * np.sqrt(SedimSys.slope[t])), 3/5)
+                    v_overbank = 1 / self.reach_data.n * np.power(h_overbank, 2/3) * np.sqrt(SedimSys.slope[t])
+                elif self.indx_flo_depth == 2:
+                    q_star = overbank_Q[t, :] / (width_overbank_t * np.sqrt(GRAV * SedimSys.slope[t] * self.reach_data.D84**3))
+                    p = np.where(q_star < 100, 0.24, 0.31)
+                    h_overbank = 0.015 * self.reach_data.D84 * (q_star ** (2 * p)) / (p ** 2.5)
+                    v_overbank = (np.sqrt(GRAV * h_overbank * SedimSys.slope[t]) * 6.5 * 2.5 * (h_overbank / self.reach_data.D84)) / np.sqrt((6.2 ** 2) * (2.5 ** 2) * ((h_overbank / self.reach_data.D84) ** (5/3)))
+                else:
+                    h_overbank = v_overbank = None
             else:
                 h_overbank = v_overbank = None
 
@@ -171,9 +185,10 @@ class DSCASCADE_MAIN:
                     and not np.isnan(overbank_Q[t, n])
                     and Q[t, n] > overbank_Q[t, n]
                 ):
+                    width_overbank_sel = overbank_width[t, n] if overbank_width is not None else SedimSys.width[t, n]
                     calculator_overbank = TransportCapacityCalculator(
                         Fi_al, D50_al, SedimSys.slope[t, n],
-                        overbank_Q[t, n], SedimSys.width[t, n], v_overbank[n], h_overbank[n],
+                        overbank_Q[t, n], width_overbank_sel, v_overbank[n], h_overbank[n],
                         SedimSys.psi, self.reach_data.roughness[n],
                     )
                     tr_cap_overbank_per_s, _ = calculator_overbank.tr_cap_function(self.indx_tr_cap, self.indx_tr_partition)
@@ -287,6 +302,7 @@ class DSCASCADE_MAIN:
         mobilised_from_reach = SedimSys.create_2d_zero_array()
         direct_connectivity = np.zeros((self.timescale, self.n_reaches, self.n_reaches + 1)) # + 1 to consider sediment going to the outlet
         deposited = SedimSys.create_2d_zero_array()
+        overbank_dep = SedimSys.create_2d_zero_array()
 
         for t in range(self.timescale):
             # Sum over provenances (axe 0) and sediment classes (axe 2)
@@ -297,6 +313,7 @@ class DSCASCADE_MAIN:
             direct_connectivity[t,:,:] = np.sum(SedimSys.direct_connectivity[t], axis = 2)
             # Deposited is the connectivity volumes summed by provenance (axe 0) and classes (axe 2) (excluding outlet)
             deposited[t,:] = np.sum(SedimSys.direct_connectivity[t][:, :-1, :], axis = (0,2))
+            overbank_dep[t,:] = np.sum(SedimSys.overbank_dep[t], axis=0)
 
         # Compute D50 mobilised (over sediment classes and provenance):
         D50_mob = SedimSys.create_2d_zero_array()
@@ -319,9 +336,10 @@ class DSCASCADE_MAIN:
                        'Deposited [m^3]': deposited.astype(np.float32),
                        'Volume outlet [m^3]': mobilised[:, SedimSys.outlet].astype(np.float32),
                        'D50 volume out [m]': D50_mob.astype(np.float32),
-                       'D50 active layer [m]': SedimSys.D50_al.astype(np.float32),
-                       'Direct connectivity [m^3]': direct_connectivity.astype(np.float32),
-                       'Transport capacity [m^3]': transport_capacity.astype(np.float32),
+                        'D50 active layer [m]': SedimSys.D50_al.astype(np.float32),
+                        'Direct connectivity [m^3]': direct_connectivity.astype(np.float32),
+                        'Overbank deposited [m^3]': overbank_dep.astype(np.float32),
+                        'Transport capacity [m^3]': transport_capacity.astype(np.float32),
 
                        # TODO: 'Touch erosion max': touch_eros_max,
                         }
@@ -330,6 +348,7 @@ class DSCASCADE_MAIN:
         mobilised_per_class = np.zeros((self.timescale, self.n_reaches, self.n_classes))
         transported_per_class = np.zeros((self.timescale, self.n_reaches, self.n_classes))
         deposited_per_class = np.zeros((self.timescale, self.n_reaches, self.n_classes))
+        overbank_dep_per_class = np.zeros((self.timescale, self.n_reaches, self.n_classes))
 
 
         for t in range(self.timescale - 1):
@@ -337,11 +356,13 @@ class DSCASCADE_MAIN:
             mobilised_per_class[t,:,:] = np.sum(SedimSys.Qbi_mob[t], axis = (0))
             transported_per_class[t,:,:] = np.sum(SedimSys.Qbi_tr[t], axis = (0))
             deposited_per_class[t,:,:] = np.sum(SedimSys.direct_connectivity[t][:, :-1, :], axis = (0)) # - 1 to exclude outlet
+            overbank_dep_per_class[t,:,:] = SedimSys.overbank_dep[t]
 
         # Complete matrices:
         extended_output = {'Volume out per grain sizes [m^3]': mobilised_per_class,
                            'Volume in per grain sizes [m^3]': transported_per_class,
                            'Deposited per grain sizes [m^3]': deposited_per_class,
+                           'Overbank deposited per grain sizes [m^3]': overbank_dep_per_class,
 
 
                            'Qbi_mob [m^3]': SedimSys.Qbi_mob,

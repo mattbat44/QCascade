@@ -22,7 +22,8 @@ class ReachDataStub:
 def test_tr_cap_deposit_overbank_respects_capacity_and_stratigraphy():
     psi = np.array([-1.0, 0.0])
     reach_data = ReachDataStub(n_reaches=1)
-    system = SedimentarySystem(reach_data, {"outlet": 0}, timescale=1, ts_length=1, save_dep_layer=False, psi=psi)
+    system = SedimentarySystem(reach_data, {"outlet": 0}, timescale=1, ts_length=1, save_dep_layer="never", psi=psi)
+    system.initialize_storing_matrices()
 
     V_dep2act = np.array([
         [1.0, 0.6, 0.2],
@@ -31,7 +32,7 @@ def test_tr_cap_deposit_overbank_respects_capacity_and_stratigraphy():
     V_dep = np.array([[1.0, 0.1, 0.1]])
     tr_cap_overbank = np.array([0.7, 0.5])
 
-    V_dep2act_new, V_dep_out = system.tr_cap_deposit_overbank(
+    V_dep2act_new, V_dep_out, V_overbank_dep = system.tr_cap_deposit_overbank(
         V_dep2act, V_dep, tr_cap_overbank, roundpar=np.nan
     )
 
@@ -43,12 +44,14 @@ def test_tr_cap_deposit_overbank_respects_capacity_and_stratigraphy():
     np.testing.assert_allclose(after_total, before_total)
 
     assert np.all(system.provenance(V_dep_out) == 1)
+    np.testing.assert_allclose(system.sediments(V_overbank_dep).sum(axis=0), np.array([0.3, 0.3]))
 
 
 def test_compute_mobilised_volumes_applies_overbank_capacity():
     psi = np.array([-1.0, 0.0])
     reach_data = ReachDataStub(n_reaches=1)
-    system = SedimentarySystem(reach_data, {"outlet": 0}, timescale=1, ts_length=1, save_dep_layer=False, psi=psi)
+    system = SedimentarySystem(reach_data, {"outlet": 0}, timescale=1, ts_length=1, save_dep_layer="never", psi=psi)
+    system.initialize_storing_matrices()
 
     system.eros_max_vol = np.array([[10.0]])
 
@@ -66,3 +69,5 @@ def test_compute_mobilised_volumes_applies_overbank_capacity():
     before_total = system.sediments(V_dep).sum()
     after_total = system.sediments(V_dep_new).sum() + system.sediments(V_mob).sum()
     np.testing.assert_allclose(after_total, before_total)
+
+    np.testing.assert_allclose(system.overbank_dep[0, 0, :], np.array([0.7, 0.6]))
