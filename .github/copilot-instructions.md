@@ -11,6 +11,11 @@ D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-bas
 - `inputs/`: Input data (Shapefiles, CSVs, MAT files).
 - `post_process_examples/`: Scripts for analyzing output pickle files.
 - `unit_tests/`: Test suite.
+- `qgis_plugin/`: QGIS 3.x plugin (on `qgis-plugin` branch).
+  - `dcascade_plugin.py`: Main plugin class integrating with QGIS.
+  - `docks/`: Dockable panels (parameters, results viewer).
+  - `core/`: Core functionality (config manager, runner thread).
+  - `metadata.txt`: Plugin metadata for QGIS.
 
 ### Key Classes (`src/`)
 - **`DCASCADE`** (`dcascade.py`): The main solver class. Contains the `run()` method which executes the time-loop simulation.
@@ -57,5 +62,33 @@ D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-bas
 - **Sediment Classes:** Defined by `psi` (Krumbein phi scale).
 - **Transport Formulas:** Selected via indices (e.g., `indx_tr_cap`, `indx_tr_partition`) passed to the solver.
 - **Network Topology:** Defined by `FromN` (upstream node) and `ToN` (downstream node) columns in the input dataframe.
+
+## QGIS Plugin Architecture
+
+The QGIS plugin is located on the `qgis-plugin` branch and provides a full GUI interface integrated into QGIS.
+
+### Plugin Structure
+- **Main Plugin Class** (`qgis_plugin/dcascade_plugin.py`): Integrates with QGIS, manages docks, handles layer selection and symbology animation.
+- **Parameters Dock** (`qgis_plugin/docks/parameters_dock.py`): Tabbed dock on the right side with all configuration options, layer selector, and external inputs management.
+- **Results Viewer Dock** (`qgis_plugin/docks/results_viewer_dock.py`): Dock at the bottom with matplotlib-based visualization, time series plots, spatial analysis, and animation controls.
+- **Core Module** (`qgis_plugin/core/`): Configuration management and simulation runner thread.
+
+### Key QGIS Integration Points
+- Uses `QgsMapLayerComboBox` for layer selection instead of file paths.
+- Integrates with QGIS map canvas via `iface.mapCanvas()`.
+- Listens to `QgsMapCanvas.selectionChanged` for feature selection.
+- Updates layer symbology using `QgsGraduatedSymbolRenderer` for animation.
+- Uses PyQt5 (QGIS 3.x) instead of PyQt6.
+- Uses matplotlib instead of Plotly/WebEngine for plots.
+
+### Interactions
+- **Map → Results**: When a reach is selected in the map, it's graphed in the results viewer.
+- **Map → Parameters**: When a reach is selected, external inputs can be added to it.
+- **Results → Map**: Time slider controls layer symbology animation based on simulation results.
+
+### Installation
+- Copy the `qgis_plugin` directory to QGIS plugins folder.
+- Restart QGIS and enable the plugin via Plugins → Manage and Install Plugins.
+- Ensure all dependencies (numpy, pandas, geopandas, matplotlib) are available in QGIS Python environment.
 
 
