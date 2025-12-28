@@ -91,9 +91,6 @@ def visualize_sediment_core(core, psi, reach_id, timestep, output_path=None):
     output_path : str, optional
         Path to save the figure. If None, displays interactively.
     """
-    import warnings
-    warnings.filterwarnings('ignore', category=RuntimeWarning)
-    
     n_layers = core.shape[0]
     n_classes = len(psi)
     
@@ -101,7 +98,9 @@ def visualize_sediment_core(core, psi, reach_id, timestep, output_path=None):
     sediment_volumes = core[:, 1:]  # Assumes 1 metadata column
     
     # Calculate layer thicknesses (sum of all sediment classes)
-    layer_thicknesses = np.sum(sediment_volumes, axis=1)
+    # Suppress only division warnings that may occur with empty layers
+    with np.errstate(divide='ignore', invalid='ignore'):
+        layer_thicknesses = np.sum(sediment_volumes, axis=1)
     
     # Create figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 10))
@@ -120,11 +119,12 @@ def visualize_sediment_core(core, psi, reach_id, timestep, output_path=None):
         height = layer_thicknesses[i]
         if height > 0:  # Only plot non-empty layers
             # Calculate grain size distribution for this layer
-            total_volume = np.sum(sediment_volumes[i, :])
-            if total_volume > 0:
-                gsd = sediment_volumes[i, :] / total_volume
-            else:
-                gsd = np.zeros(n_classes)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                total_volume = np.sum(sediment_volumes[i, :])
+                if total_volume > 0:
+                    gsd = sediment_volumes[i, :] / total_volume
+                else:
+                    gsd = np.zeros(n_classes)
             
             # Create stacked bar for grain size classes
             left = 0
@@ -161,16 +161,25 @@ def visualize_sediment_core(core, psi, reach_id, timestep, output_path=None):
     else:
         prov_colors = {}
     
+    # Track which provenances have been labeled
+    labeled_provenances = set()
+    
     for i in range(n_layers-1, -1, -1):  # Start from bottom (oldest)
         height = layer_thicknesses[i]
         if height > 0:
             prov = provenance_values[i]
             color = prov_colors.get(int(prov), 'gray') if prov >= 0 else 'gray'
-            label = f'Reach {int(prov)}' if prov >= 0 else 'Unknown'
+            
+            # Only add label if this provenance hasn't been labeled yet
+            if prov not in labeled_provenances and prov >= 0:
+                label = f'Reach {int(prov)}'
+                labeled_provenances.add(prov)
+            else:
+                label = ''
             
             ax2.barh(bottom + height/2, 1, height=height, 
                     color=color, edgecolor='black', linewidth=0.5,
-                    label=label if i == n_layers-1 or prov not in provenance_values[i+1:] else '')
+                    label=label)
             
             bottom += height
     

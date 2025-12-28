@@ -10,6 +10,9 @@ import sys
 import numpy as np
 import pytest
 import importlib.util
+import tempfile
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for all tests
 
 # Add source (src) folder in the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
@@ -66,9 +69,6 @@ def test_extract_sediment_core(scv_module):
 
 def test_visualize_sediment_core_no_errors(scv_module):
     """Test that visualize_sediment_core runs without errors"""
-    import matplotlib
-    matplotlib.use('Agg')  # Use non-interactive backend
-    
     scv = scv_module
     
     # Create mock core data
@@ -85,7 +85,6 @@ def test_visualize_sediment_core_no_errors(scv_module):
     psi = np.linspace(-8, 5, n_classes)
     
     # Test visualization (should not raise errors)
-    import tempfile
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
     
@@ -102,9 +101,6 @@ def test_visualize_sediment_core_no_errors(scv_module):
 
 def test_visualize_core_summary_no_errors(scv_module):
     """Test that visualize_core_summary runs without errors"""
-    import matplotlib
-    matplotlib.use('Agg')  # Use non-interactive backend
-    
     scv = scv_module
     
     # Create mock Qbi_dep data
@@ -126,7 +122,6 @@ def test_visualize_core_summary_no_errors(scv_module):
     psi = np.linspace(-8, 5, n_classes)
     
     # Test visualization
-    import tempfile
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
     
@@ -143,9 +138,6 @@ def test_visualize_core_summary_no_errors(scv_module):
 
 def test_empty_layers_handling(scv_module):
     """Test handling of empty sediment layers"""
-    import matplotlib
-    matplotlib.use('Agg')  # Use non-interactive backend
-    
     scv = scv_module
     
     # Create core with some empty layers
@@ -162,7 +154,6 @@ def test_empty_layers_handling(scv_module):
     psi = np.linspace(-8, 5, n_classes)
     
     # Should handle empty layers gracefully
-    import tempfile
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
     
