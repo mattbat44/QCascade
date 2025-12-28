@@ -1287,7 +1287,7 @@ class SedimentarySystem:
 
         @return V_dep2act_new
             Mobilisable portion of V_dep2act after enforcing overbank capacity.
-        @return V_dep_new
+        @return V_dep_out
             Updated deposit layer after re-depositing excess sediment.
         """
 
@@ -1302,6 +1302,8 @@ class SedimentarySystem:
             over_capacity_map = csum > V_to_be_eroded
             over_capacity_map[0, np.sum(over_capacity_map, axis=0) == 0] = True
 
+            # Replicates MATLAB logic: find the first layer where csum falls below capacity,
+            # then select the layer just above it (wrapping to the top layer when needed).
             firstoverthresh = np.zeros(over_capacity_map.shape[1], dtype=int)
             for col in range(over_capacity_map.shape[1]):
                 idx = np.argmin(over_capacity_map[:, col]) + 1  # 1-based index of first minimum
@@ -1315,7 +1317,7 @@ class SedimentarySystem:
 
             numer = V_to_be_eroded - np.sum(V_dep2act_class * (~over_capacity_map), axis=0)
             denom = V_dep2act_class[firstoverthresh, np.arange(over_capacity_map.shape[1])]
-            perc_dep = np.minimum(numer / denom, 1)
+            perc_dep = np.where(denom != 0, np.minimum(numer / denom, 1), 0)
 
             map_perc = mapfirst * perc_dep + (~over_capacity_map)
 
