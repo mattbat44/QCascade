@@ -9,22 +9,29 @@ import os
 import sys
 import numpy as np
 import pytest
+import importlib.util
 
 # Add source (src) folder in the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../post_process_examples')))
 
 
-def test_extract_sediment_core():
-    """Test the extract_sediment_core function"""
-    # Import the function
-    import importlib.util
+# Fixture to load the sediment core visualization module
+@pytest.fixture(scope="module")
+def scv_module():
+    """Load the sediment core visualization module dynamically"""
     spec = importlib.util.spec_from_file_location(
         "sediment_core_visualization",
         os.path.join(os.path.dirname(__file__), '../post_process_examples/09-sediment_core_visualization.py')
     )
     scv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scv)
+    return scv
+
+
+def test_extract_sediment_core(scv_module):
+    """Test the extract_sediment_core function"""
+    scv = scv_module
     
     # Create mock Qbi_dep data structure
     # Structure: [timestep][reach_id] -> numpy array (layers x [metadata + sediment_classes])
@@ -57,18 +64,12 @@ def test_extract_sediment_core():
     assert np.all(core[:, 0] == reach_id)
 
 
-def test_visualize_sediment_core_no_errors():
+def test_visualize_sediment_core_no_errors(scv_module):
     """Test that visualize_sediment_core runs without errors"""
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "sediment_core_visualization",
-        os.path.join(os.path.dirname(__file__), '../post_process_examples/09-sediment_core_visualization.py')
-    )
-    scv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(scv)
+    scv = scv_module
     
     # Create mock core data
     n_layers = 10
@@ -99,18 +100,12 @@ def test_visualize_sediment_core_no_errors():
             os.remove(tmp_path)
 
 
-def test_visualize_core_summary_no_errors():
+def test_visualize_core_summary_no_errors(scv_module):
     """Test that visualize_core_summary runs without errors"""
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "sediment_core_visualization",
-        os.path.join(os.path.dirname(__file__), '../post_process_examples/09-sediment_core_visualization.py')
-    )
-    scv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(scv)
+    scv = scv_module
     
     # Create mock Qbi_dep data
     n_timesteps = 4
@@ -146,18 +141,12 @@ def test_visualize_core_summary_no_errors():
             os.remove(tmp_path)
 
 
-def test_empty_layers_handling():
+def test_empty_layers_handling(scv_module):
     """Test handling of empty sediment layers"""
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "sediment_core_visualization",
-        os.path.join(os.path.dirname(__file__), '../post_process_examples/09-sediment_core_visualization.py')
-    )
-    scv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(scv)
+    scv = scv_module
     
     # Create core with some empty layers
     n_layers = 5
@@ -186,17 +175,5 @@ def test_empty_layers_handling():
 
 
 if __name__ == "__main__":
-    # Run tests
-    test_extract_sediment_core()
-    print("✓ test_extract_sediment_core passed")
-    
-    test_visualize_sediment_core_no_errors()
-    print("✓ test_visualize_sediment_core_no_errors passed")
-    
-    test_visualize_core_summary_no_errors()
-    print("✓ test_visualize_core_summary_no_errors passed")
-    
-    test_empty_layers_handling()
-    print("✓ test_empty_layers_handling passed")
-    
-    print("\nAll tests passed!")
+    # Run tests with pytest
+    pytest.main([__file__, '-v'])

@@ -29,11 +29,11 @@ sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
 from json_serializer import load_from_json
 
 #---------------------Path to the extended JSON output
-path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
+path = os.path.join(SCRIPT_DIR, "..", "cascade_results", "") 
 name_simu_ext = 'Vjosa_test_ext'
 
 #---------------------Folder to store the plots
-figure_folder = os.path.join(path, 'sediment_cores\\')
+figure_folder = os.path.join(path, 'sediment_cores', '')
 if not os.path.exists(figure_folder):       
     os.makedirs(figure_folder)
 
