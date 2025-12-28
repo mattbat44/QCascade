@@ -14,6 +14,7 @@ from qgis.core import Qgis, QgsMessageLog
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -39,14 +40,20 @@ class ResultsViewerDock(QDockWidget):
         self.canvas_dock = None
         
         self.results_data = None
+        self.results_data_ext = None
         self.results_path = None
         self.reach_data = None
+        self.network_layer = None
         self.selected_reaches = []
         self.data_ranges = {}
         
         self.init_ui()
         self.setWidget(self.container)
         self._init_canvas_dock()
+
+    def set_network_layer(self, layer):
+        """Set the network layer for topology queries."""
+        self.network_layer = layer
 
     def _resolve_main_window(self, candidate):
         """Best-effort helper to find the QMainWindow to attach secondary docks."""
@@ -100,11 +107,19 @@ class ResultsViewerDock(QDockWidget):
         self.spatial_tab = self.create_spatial_tab()
         self.tab_widget.addTab(self.spatial_tab, "Spatial Analysis")
         
-        # Tab 3: Animation controls (map + plot)
+        # Tab 3: Connectivity
+        self.connectivity_tab = self.create_connectivity_tab()
+        self.tab_widget.addTab(self.connectivity_tab, "Connectivity")
+
+        # Tab 4: Long Profile
+        self.long_profile_tab = self.create_long_profile_tab()
+        self.tab_widget.addTab(self.long_profile_tab, "Long Profile")
+
+        # Tab 5: Animation controls (map + plot)
         self.animation_tab = self.create_animation_tab()
         self.tab_widget.addTab(self.animation_tab, "Animation")
         
-        # Tab 4: Statistics
+        # Tab 6: Statistics
         self.stats_tab = self.create_stats_tab()
         self.tab_widget.addTab(self.stats_tab, "Statistics")
         
@@ -135,7 +150,10 @@ class ResultsViewerDock(QDockWidget):
             'Transport capacity [m^3]',
             'Sediment budget [m^3]',
             'D50 active layer [m]',
-            'D50 volume out [m]'
+            'D50 volume out [m]',
+            'Elevation (Upstream) [m]',
+            'Elevation (Downstream) [m]',
+            'Elevation Change (Upstream) [m]'
         ])
         self.ts_variable_combo.currentTextChanged.connect(self.update_time_series_plot)
         var_layout.addRow("Variable:", self.ts_variable_combo)
@@ -150,6 +168,11 @@ class ResultsViewerDock(QDockWidget):
         self.ts_multi_check = QCheckBox("Show all reaches")
         self.ts_multi_check.stateChanged.connect(self.update_time_series_plot)
         var_layout.addRow("", self.ts_multi_check)
+
+        # Grain size breakdown checkbox
+        self.ts_grain_size_check = QCheckBox("Breakdown by Grain Size")
+        self.ts_grain_size_check.stateChanged.connect(self.update_time_series_plot)
+        var_layout.addRow("", self.ts_grain_size_check)
         
         layout.addLayout(var_layout)
         
@@ -196,6 +219,11 @@ class ResultsViewerDock(QDockWidget):
         self.spatial_year_spin.valueChanged.connect(self.update_spatial_plot)
         var_layout.addRow("Year:", self.spatial_year_spin)
         
+        # Yearly profiles checkbox
+        self.spatial_yearly_check = QCheckBox("Show Yearly Profiles")
+        self.spatial_yearly_check.stateChanged.connect(self.update_spatial_plot)
+        var_layout.addRow("", self.spatial_yearly_check)
+
         layout.addLayout(var_layout)
         
         # Plot button
@@ -344,16 +372,30 @@ class ResultsViewerDock(QDockWidget):
             with open(file_path, 'rb') as f:
                 self.results_data = pickle.load(f)
             
+            # Try to load extended results
+            ext_path = file_path.replace('.p', '_ext.p')
+            if Path(ext_path).exists():
+                try:
+                    with open(ext_path, 'rb') as f:
+                        self.results_data_ext = pickle.load(f)
+                except Exception:
+                    self.results_data_ext = None
+            else:
+                self.results_data_ext = None
+
             self.results_path = file_path
             
             # Update UI
             self.update_ui_with_results()
             
+            msg = f"Loaded results from {Path(file_path).name}\nAvailable variables: {len(self.results_data)} fields"
+            if self.results_data_ext:
+                msg += "\nExtended results loaded."
+            
             QgsMessageLog.logMessage(
                 self,
                 "Success",
-                f"Loaded results from {Path(file_path).name}\n"
-                f"Available variables: {len(self.results_data)} fields",
+                msg,
                 "D-CASCADE",
                 Qgis.Info
             )
@@ -368,6 +410,18 @@ class ResultsViewerDock(QDockWidget):
             try:
                 with open(path, 'rb') as f:
                     self.results_data = pickle.load(f)
+                
+                # Try to load extended results
+                ext_path = path.replace('.p', '_ext.p')
+                if Path(ext_path).exists():
+                    try:
+                        with open(ext_path, 'rb') as f:
+                            self.results_data_ext = pickle.load(f)
+                    except Exception:
+                        self.results_data_ext = None
+                else:
+                    self.results_data_ext = None
+
                 self.update_ui_with_results()
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Could not load results: {str(e)}")
@@ -429,6 +483,121 @@ class ResultsViewerDock(QDockWidget):
         try:
             variable = self.ts_variable_combo.currentText()
             
+            # Handle Grain Size Breakdown
+            if hasattr(self, 'ts_grain_size_check') and self.ts_grain_size_check.isChecked():
+                if self.results_data_ext is None:
+                    QMessageBox.warning(self, "Warning", "Extended results (_ext.p) not found. Cannot show grain size breakdown.")
+                    self.ts_grain_size_check.setChecked(False)
+                else:
+                    # Map variable to extended key
+                    ext_key = None
+                    if variable == 'Volume out [m^3]':
+                        ext_key = 'Volume out per grain sizes [m^3]'
+                    elif variable == 'Transport capacity [m^3]':
+                        ext_key = 'Tr_cap per class [m^3]'
+                    elif variable == 'Volume in [m^3]':
+                        ext_key = 'Volume in per grain sizes [m^3]'
+                    elif variable == 'Sediment budget [m^3]':
+                        ext_key = 'Sediment budget per class [m^3]'
+                    
+                    if ext_key and ext_key in self.results_data_ext:
+                        data_ext = self.results_data_ext[ext_key]
+                        # data_ext shape: (time, reach, classes)
+                        
+                        reach_idx = self.ts_reach_combo.currentIndex()
+                        if reach_idx >= 0 and reach_idx < data_ext.shape[1]:
+                            self.figure.clear()
+                            ax = self.figure.add_subplot(111)
+                            
+                            y_data = []
+                            labels = []
+                            num_classes = data_ext.shape[2]
+                            
+                            # Try to get psi from results if available
+                            psi_labels = [f"Class {i+1}" for i in range(num_classes)]
+                            if 'psi' in self.results_data:
+                                psi = self.results_data['psi']
+                                if len(psi) == num_classes:
+                                    psi_labels = [f"Psi {p:.1f}" for p in psi]
+
+                            for i in range(num_classes):
+                                y_data.append(data_ext[:, reach_idx, i])
+                            
+                            ax.stackplot(range(data_ext.shape[0]), *y_data, labels=psi_labels)
+                            
+                            ax.set_title(f"{variable} - Grain Size Breakdown - Reach {reach_idx+1}")
+                            ax.set_xlabel("Time Step")
+                            ax.set_ylabel(variable)
+                            ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+                            self._apply_plot_margins()
+                            self.canvas.draw()
+                            if self.canvas_dock:
+                                self.canvas_dock.show()
+                            return
+                    else:
+                         QMessageBox.warning(self, "Warning", f"Extended data for {variable} not available.")
+
+            # Handle Elevation (Upstream/Downstream)
+            if variable.startswith('Elevation'):
+                if self.results_data_ext is None or 'Node_el [m]' not in self.results_data_ext:
+                    QMessageBox.warning(self, "Warning", "Extended results with 'Node_el [m]' required for elevation plots.")
+                    return
+                
+                node_el = self.results_data_ext['Node_el [m]']
+                # node_el shape: (time, nodes)
+                
+                self.figure.clear()
+                ax = self.figure.add_subplot(111)
+                
+                reach_list = []
+                if self.selected_reaches:
+                    for rid in self.selected_reaches:
+                        try:
+                            idx = int(rid) - 1
+                            if 0 <= idx < node_el.shape[1]:
+                                reach_list.append(idx)
+                        except Exception:
+                            continue
+                if not reach_list:
+                    reach_list = [self.ts_reach_combo.currentIndex()] if self.ts_reach_combo.count() else []
+                
+                for idx in reach_list:
+                    # Assumption: Reach i starts at Node i
+                    node_idx = idx
+                    # If Downstream, we need the downstream node.
+                    # Without topology, we can't be 100% sure, but usually it's i+1 in a chain.
+                    # Or we can just plot the upstream node elevation.
+                    
+                    if 'Downstream' in variable:
+                        # Try to guess downstream node index (i+1)
+                        # This is risky but better than nothing if topology is missing
+                        node_idx = idx + 1
+                        if node_idx >= node_el.shape[1]:
+                            node_idx = idx # Fallback
+                    
+                    if 0 <= node_idx < node_el.shape[1]:
+                        y_vals = node_el[:, node_idx]
+                        
+                        if 'Change' in variable:
+                            # Calculate change relative to initial time step
+                            y_vals = y_vals - y_vals[0]
+                            label_suffix = "Change"
+                        else:
+                            label_suffix = ""
+                            
+                        ax.plot(y_vals, label=f'Reach {idx+1} {label_suffix}', linewidth=2)
+                
+                ax.set_title(f"{variable} - Time Series")
+                ax.set_xlabel("Time Step")
+                ax.set_ylabel("Elevation [m]" if 'Change' not in variable else "Elevation Change [m]")
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                self._apply_plot_margins()
+                self.canvas.draw()
+                if self.canvas_dock:
+                    self.canvas_dock.show()
+                return
+
             if variable not in self.results_data:
                 self.show_empty_plot()
                 return
@@ -483,32 +652,68 @@ class ResultsViewerDock(QDockWidget):
                 return
             
             data = self.results_data[variable]
-            agg_method = self.spatial_agg_combo.currentText().lower()
-            
-            # Aggregate over time
-            if agg_method == 'mean':
-                spatial_data = np.mean(data, axis=0)
-            elif agg_method == 'median':
-                spatial_data = np.median(data, axis=0)
-            elif agg_method == 'sum':
-                spatial_data = np.sum(data, axis=0)
-            elif agg_method == 'max':
-                spatial_data = np.max(data, axis=0)
-            elif agg_method == 'min':
-                spatial_data = np.min(data, axis=0)
-            else:
-                spatial_data = np.mean(data, axis=0)
             
             self.figure.clear()
             ax = self.figure.add_subplot(111)
             
-            reach_labels = [f"R{i+1}" for i in range(len(spatial_data))]
-            ax.bar(reach_labels, spatial_data, color='steelblue')
+            # Check for Yearly Profiles
+            if hasattr(self, 'spatial_yearly_check') and self.spatial_yearly_check.isChecked():
+                # Assume daily time steps if not specified
+                steps_per_year = 365
+                if 'ts_length' in self.results_data:
+                    # ts_length is in days usually? Or seconds?
+                    # In D-CASCADE, ts_length is usually 1 (day) or similar.
+                    # If ts_length is available, we can calculate steps per year.
+                    # But let's just assume 365 for now or try to find it.
+                    pass
+                
+                num_timesteps = data.shape[0]
+                num_years = num_timesteps // steps_per_year
+                
+                reach_indices = range(data.shape[1])
+                
+                # Use a colormap
+                cm = plt.get_cmap('viridis')
+                
+                for y in range(num_years + 1):
+                    t_idx = y * steps_per_year
+                    if t_idx < num_timesteps:
+                        color = cm(y / (num_years + 1)) if num_years > 0 else 'blue'
+                        ax.plot(reach_indices, data[t_idx, :], color=color, alpha=0.7)
+                
+                # Add colorbar
+                sm =  self.figure.colorbar(plt.cm.ScalarMappable(cmap=cm, norm=plt.Normalize(vmin=0, vmax=num_years)), ax=ax)
+                sm.set_label('Year')
+                
+                ax.set_title(f"{variable} - Yearly Profiles")
+                ax.set_xlabel("Reach Index")
+                ax.set_ylabel(variable)
+                
+            else:
+                agg_method = self.spatial_agg_combo.currentText().lower()
+                
+                # Aggregate over time
+                if agg_method == 'mean':
+                    spatial_data = np.mean(data, axis=0)
+                elif agg_method == 'median':
+                    spatial_data = np.median(data, axis=0)
+                elif agg_method == 'sum':
+                    spatial_data = np.sum(data, axis=0)
+                elif agg_method == 'max':
+                    spatial_data = np.max(data, axis=0)
+                elif agg_method == 'min':
+                    spatial_data = np.min(data, axis=0)
+                else:
+                    spatial_data = np.mean(data, axis=0)
+                
+                reach_labels = [f"R{i+1}" for i in range(len(spatial_data))]
+                ax.bar(reach_labels, spatial_data, color='steelblue')
+                
+                ax.set_title(f"{variable} - {agg_method.title()} Along Reaches")
+                ax.set_xlabel("Reach Index")
+                ax.set_ylabel(f"{agg_method.title()} {variable}")
+                ax.tick_params(axis='x', rotation=45)
             
-            ax.set_title(f"{variable} - {agg_method.title()} Along Reaches")
-            ax.set_xlabel("Reach Index")
-            ax.set_ylabel(f"{agg_method.title()} {variable}")
-            ax.tick_params(axis='x', rotation=45)
             self._apply_plot_margins()
             self.canvas.draw()
             if self.canvas_dock:
@@ -570,6 +775,67 @@ class ResultsViewerDock(QDockWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
     
+    def create_connectivity_tab(self):
+        """Create connectivity/heatmap tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        var_layout = QFormLayout()
+        
+        self.conn_variable_combo = QComboBox()
+        self.conn_variable_combo.addItems([
+            'Volume out [m^3]',
+            'Volume in [m^3]',
+            'Transport capacity [m^3]',
+            'Sediment budget [m^3]'
+        ])
+        self.conn_variable_combo.currentTextChanged.connect(self.update_connectivity_plot)
+        var_layout.addRow("Variable:", self.conn_variable_combo)
+        
+        layout.addLayout(var_layout)
+        
+        plot_btn = QPushButton("Generate Heatmap")
+        plot_btn.clicked.connect(self.update_connectivity_plot)
+        layout.addWidget(plot_btn)
+        
+        layout.addStretch()
+        return tab
+
+    def update_connectivity_plot(self):
+        """Update connectivity heatmap (Time vs Reach)."""
+        if self.results_data is None:
+            return
+        
+        try:
+            variable = self.conn_variable_combo.currentText()
+            if variable not in self.results_data:
+                return
+            
+            data = self.results_data[variable]
+            # data shape: (time, reach)
+            
+            self.figure.clear()
+            ax = self.figure.add_subplot(111)
+            
+            # Plot heatmap
+            # x: Reach, y: Time
+            im = ax.imshow(data, aspect='auto', cmap='viridis', origin='lower')
+            
+            ax.set_title(f"{variable} - Spatiotemporal Heatmap")
+            ax.set_xlabel("Reach Index")
+            ax.set_ylabel("Time Step")
+            
+            cbar = self.figure.colorbar(im, ax=ax)
+            cbar.set_label(variable)
+            
+            self._apply_plot_margins()
+            self.canvas.draw()
+            if self.canvas_dock:
+                self.canvas_dock.show()
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
+
     def animate_results(self):
         """Animate through time steps."""
         from qgis.PyQt.QtCore import QTimer
@@ -594,6 +860,164 @@ class ResultsViewerDock(QDockWidget):
         if hasattr(self, "play_btn"):
             self.play_btn.setText("▶ Play")
     
+
+    def create_long_profile_tab(self):
+        """Create long profile visualization tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        info_label = QLabel("Select a sequence of connected reaches in the map to view the long profile.")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Controls
+        controls_layout = QHBoxLayout()
+        
+        self.lp_update_btn = QPushButton("Update Profile from Selection")
+        self.lp_update_btn.clicked.connect(lambda: self.update_long_profile_plot(use_slider=False))
+        controls_layout.addWidget(self.lp_update_btn)
+        
+        layout.addLayout(controls_layout)
+        
+        # Time slider for long profile animation
+        slider_layout = QHBoxLayout()
+        slider_layout.addWidget(QLabel("Time Step:"))
+        self.lp_time_slider = QSlider(Qt.Horizontal)
+        self.lp_time_slider.setMinimum(0)
+        self.lp_time_slider.setMaximum(100)
+        self.lp_time_slider.setValue(0)
+        self.lp_time_slider.setEnabled(False)
+        self.lp_time_slider.valueChanged.connect(self.on_lp_time_slider_changed)
+        slider_layout.addWidget(self.lp_time_slider, 1)
+        self.lp_time_label = QLabel("0 / 0")
+        slider_layout.addWidget(self.lp_time_label)
+        layout.addLayout(slider_layout)
+        
+        layout.addStretch()
+        return tab
+
+    def on_lp_time_slider_changed(self, value):
+        """Handle long profile time slider change."""
+        self.lp_time_label.setText(f"{value} / {self.lp_time_slider.maximum()}")
+        self.update_long_profile_plot(use_slider=True)
+
+    def update_long_profile_plot(self, use_slider=False):
+        """Update long profile plot."""
+        if self.results_data_ext is None or 'Node_el [m]' not in self.results_data_ext:
+            if not use_slider: # Only warn if explicitly requested
+                QMessageBox.warning(self, "Warning", "Extended results with 'Node_el [m]' required for long profile.")
+            return
+        
+        if not self.selected_reaches:
+            if not use_slider:
+                QMessageBox.warning(self, "Warning", "No reaches selected.")
+            return
+            
+        if not self.network_layer:
+            if not use_slider:
+                QMessageBox.warning(self, "Warning", "Network layer not available for topology.")
+            return
+
+        try:
+            # Get topology for selected reaches
+            # We need to order them.
+            # 1. Get FromN, ToN, Length for all selected reaches
+            reaches_info = {} # reach_id -> {from_n, to_n, length}
+            
+            from_n_idx = self.network_layer.fields().indexFromName('FromN')
+            to_n_idx = self.network_layer.fields().indexFromName('ToN')
+            len_idx = self.network_layer.fields().indexFromName('Length_m') # Assuming Length_m or similar
+            if len_idx == -1:
+                len_idx = self.network_layer.fields().indexFromName('Length')
+            
+            # Debug logging
+            QgsMessageLog.logMessage(f"Long Profile: Selected reaches: {self.selected_reaches}", "D-CASCADE", Qgis.Info)
+            
+            for feature in self.network_layer.getFeatures():
+                from_n = feature.attribute(from_n_idx)
+                if str(from_n) in self.selected_reaches:
+                    to_n = feature.attribute(to_n_idx)
+                    length = feature.attribute(len_idx) if len_idx >= 0 else 1000.0 # Default or calc geometry
+                    reaches_info[str(from_n)] = {
+                        'from': str(from_n),
+                        'to': str(to_n),
+                        'length': float(length),
+                        'reach_idx': int(from_n) - 1 # Assumption
+                    }
+            
+            if not reaches_info:
+                QgsMessageLog.logMessage("Long Profile: No matching features found in layer.", "D-CASCADE", Qgis.Warning)
+                return
+
+            # Sort reaches into a chain
+            # Find start node (a node that is not a 'to' node in the set)
+            all_from = set(r['from'] for r in reaches_info.values())
+            all_to = set(r['to'] for r in reaches_info.values())
+            start_nodes = all_from - all_to
+            
+            if not start_nodes:
+                # Cycle or single reach? Pick one.
+                start_node = list(all_from)[0]
+            else:
+                start_node = list(start_nodes)[0] # Pick first start
+            
+            sorted_reaches = []
+            current_from = start_node
+            
+            # Traverse
+            while current_from in reaches_info:
+                r = reaches_info[current_from]
+                sorted_reaches.append(r)
+                current_from = r['to']
+                if len(sorted_reaches) > len(reaches_info):
+                    break # Loop protection
+            
+            QgsMessageLog.logMessage(f"Long Profile: Sorted chain: {[r['from'] for r in sorted_reaches]}", "D-CASCADE", Qgis.Info)
+            
+            # Prepare data for plotting
+            node_el = self.results_data_ext['Node_el [m]']
+            time_step = self.lp_time_slider.value()
+            
+            # Update slider range if needed
+            if self.lp_time_slider.maximum() != node_el.shape[0] - 1:
+                self.lp_time_slider.setMaximum(node_el.shape[0] - 1)
+                self.lp_time_slider.setEnabled(True)
+                self.lp_time_label.setText(f"{time_step} / {node_el.shape[0] - 1}")
+
+            dist = [0]
+            elev = []
+            
+            current_dist = 0
+            plot_dist = []
+            plot_elev = []
+            
+            for r in sorted_reaches:
+                r_idx = r['reach_idx']
+                if r_idx < node_el.shape[1]:
+                    # Upstream point
+                    el_up = node_el[time_step, r_idx]
+                    plot_dist.append(current_dist)
+                    plot_elev.append(el_up)
+                    
+                    current_dist += r['length']
+            
+            self.figure.clear()
+            ax = self.figure.add_subplot(111)
+            
+            ax.plot(plot_dist, plot_elev, 'o-', label=f'Time {time_step}')
+            
+            ax.set_title("Longitudinal Profile")
+            ax.set_xlabel("Distance [m]")
+            ax.set_ylabel("Elevation [m]")
+            ax.grid(True)
+            
+            self._apply_plot_margins()
+            self.canvas.draw()
+            if self.canvas_dock:
+                self.canvas_dock.show()
+
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to plot profile: {str(e)}")
 
     def _show_canvas_menu(self, pos):
         """Provide right-click menu with save option via toolbar."""
@@ -665,9 +1089,9 @@ class ResultsViewerDock(QDockWidget):
         if from_n_value is None:
             self.selected_reaches = []
         elif isinstance(from_n_value, (list, tuple)):
-            self.selected_reaches = list(from_n_value)
+            self.selected_reaches = [str(x) for x in from_n_value]
         else:
-            self.selected_reaches = [from_n_value]
+            self.selected_reaches = [str(from_n_value)]
 
         # Switch to time series tab and refresh
         self.tab_widget.setCurrentIndex(0)

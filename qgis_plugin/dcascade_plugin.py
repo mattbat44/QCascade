@@ -225,6 +225,10 @@ class DCascadePlugin:
         # Store reference
         self.network_layer = layer
         
+        # Pass layer to results viewer
+        if self.results_viewer_dock:
+            self.results_viewer_dock.set_network_layer(layer)
+        
         # Validate required fields
         field_names = [field.name() for field in layer.fields()]
         required = ['FromN', 'ToN']
