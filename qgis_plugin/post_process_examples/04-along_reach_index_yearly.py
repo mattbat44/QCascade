@@ -21,6 +21,7 @@ Choose between:
 
 # Libraries 
 import os
+import sys
 import numpy as np 
 from matplotlib import pyplot as plt 
 import matplotlib.cm as cm 
@@ -29,7 +30,11 @@ import geopandas as gpd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-#---------------------Path to the pickle output
+# Add source (src) folder in the python path
+sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
+from json_serializer import load_from_json
+
+#---------------------Path to the JSON output
 path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 
@@ -43,7 +48,7 @@ if not os.path.exists(figure_folder):
     os.makedirs(figure_folder)
        
 #--------------------Output name you want to plot
-output_name = 'Volume out [m^3]'   # Output available in pickle file
+output_name = 'Volume out [m^3]'   # Output available in JSON file
 #'D50 active layer [m]', 'D50 volume out [m]', 'Sediment budget [m^3]', 'Transport capacity [m^3]', 'Volume in [m^3]', 'Volume out [m^3]'
 
 #--------------------First year simulated (for legend)
@@ -76,7 +81,7 @@ def rename_names(output_name):
 
 ##### Plot average or median, x axis is the reach index
 
-data_output = pd.read_pickle(open( path + name_simu + '.p' , "rb"))
+data_output = load_from_json(path + name_simu + '.json')
 my_data = data_output[output_name]
 n_reach = my_data.shape[1]
 FromN_idx = np.arange(1, n_reach + 1, 1)

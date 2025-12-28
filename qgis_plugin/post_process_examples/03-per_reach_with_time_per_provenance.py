@@ -20,6 +20,7 @@ These are the full storing matrice. They have the shape: [time] x array(prov_rea
 
 # Libraries 
 import os
+import sys
 import numpy as np 
 from matplotlib import pyplot as plt 
 import matplotlib.cm as cm 
@@ -28,7 +29,11 @@ import geopandas as gpd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-#---------------------Path to the extended pickle output
+# Add source (src) folder in the python path
+sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
+from json_serializer import load_from_json
+
+#---------------------Path to the extended JSON output
 path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 name_simu_ext = 'Vjosa_test_ext'
@@ -40,7 +45,7 @@ if not os.path.exists(figure_folder):
     os.makedirs(figure_folder)
        
 #--------------------Output name you want to plot
-output_name = 'Qbi_mob [m^3]'   # Output available in pickle file
+output_name = 'Qbi_mob [m^3]'   # Output available in JSON file
 # 'Qbi_mob [m^3]', 'Qbi_tr [m^3]'
 
 
@@ -68,7 +73,7 @@ def rename_names(output_name):
 
 ##### Plot for each reach, x axis is the time
 
-data_output_ext = pd.read_pickle(open( path + name_simu_ext + '.p' , "rb"))
+data_output_ext = load_from_json(path + name_simu_ext + '.json')
 my_data = data_output_ext[output_name]
 n_reach = len(my_data[0][0, :, 0])
 n_time = len(my_data)

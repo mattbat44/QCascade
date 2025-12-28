@@ -12,7 +12,6 @@ Show map with sediment path-length, per each time step
 
 import os, sys
 import numpy as np
-import pickle
 import geopandas as gpd
 import networkx as nx
 import pandas as pd
@@ -28,6 +27,10 @@ from shapely.geometry import Point
 from shapely.geometry import LineString, MultiLineString
 
 # Add source (src) folder in the python path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
+
+from json_serializer import load_from_json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from preprocessing import extract_Q, read_network                     
 from reach_data import ReachData
@@ -89,7 +92,7 @@ reach_data = reach_data.sort_values(by="FromN", ignore_index = True)
 Q_outlet = Q[start_timestep : end_timestep + 1, outlet_FromN - 1]
 
 # Load outputs
-data_output = pickle.load(open(path + name_simu + '.p', "rb"))
+data_output = load_from_json(path + name_simu + '.json')
 direct_connectivity = data_output['Direct connectivity [m^3]']
 
 

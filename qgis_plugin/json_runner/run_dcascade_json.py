@@ -4,7 +4,6 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import pickle
 
 # Add src to path first so bundled modules resolve correctly
 current_dir = Path(__file__).parent
@@ -16,6 +15,7 @@ from reach_data import ReachData
 from preprocessing import read_network, extract_Q, check_sediment_sizes, graph_preprocessing
 from GSD_curvefit import GSDcurvefit
 from validate_config import validate_config
+from json_serializer import save_to_json
 from external_inputs_builder import (
     build_external_inputs_from_csv,
     build_external_inputs_from_dir,
@@ -264,16 +264,14 @@ def run_simulation(config_path):
     results_dir.mkdir(parents=True, exist_ok=True)
 
     # Primary output
-    name_file = results_dir / Path(str(output_name) + '.p')
-    with open(name_file, 'wb') as fh:
-        pickle.dump(data_output, fh)
+    name_file = results_dir / Path(str(output_name) + '.json')
+    save_to_json(data_output, name_file)
     print(f"Saved results to {name_file}")
 
     # Extended output if present
     if extended_output is not None:
-        name_file_ext = results_dir / Path(str(output_name) + '_ext.p')
-        with open(name_file_ext, 'wb') as fh:
-            pickle.dump(extended_output, fh)
+        name_file_ext = results_dir / Path(str(output_name) + '_ext.json')
+        save_to_json(extended_output, name_file_ext)
         print(f"Saved extended results to {name_file_ext}")
 
     return data_output, extended_output

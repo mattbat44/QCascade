@@ -20,6 +20,7 @@ Choose between:
 
 # Libraries 
 import os
+import sys
 import numpy as np 
 from matplotlib import pyplot as plt 
 import matplotlib.cm as cm 
@@ -28,7 +29,11 @@ import geopandas as gpd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-#---------------------Path to the extended pickle output
+# Add source (src) folder in the python path
+sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
+from json_serializer import load_from_json
+
+#---------------------Path to the extended JSON output
 path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 name_simu_ext = 'Vjosa_test_ext'
@@ -43,7 +48,7 @@ if not os.path.exists(figure_folder):
     os.makedirs(figure_folder)
        
 #--------------------Output name you want to plot
-output_name = 'Volume out per grain sizes [m^3]'   # Output available in pickle file
+output_name = 'Volume out per grain sizes [m^3]'   # Output available in JSON file
 # 'Volume out per grain sizes [m^3]', 'Volume in per grain sizes [m^3]', 'Deposited per grain sizes [m^3]'
 
 
@@ -74,11 +79,11 @@ def rename_names(output_name):
 ##### Make a stacked plot of the sum, x axis is the reach index
 
 # Load extended outputs
-data_output_ext = pd.read_pickle(open( path + name_simu_ext + '.p' , "rb"))
+data_output_ext = load_from_json(path + name_simu_ext + '.json')
 my_data = data_output_ext[output_name]
 
 # Load basic outputs to get size classes info (dmi)
-data_output = pd.read_pickle(open( path + name_simu + '.p' , "rb"))
+data_output = load_from_json(path + name_simu + '.json')
 psi = data_output['Simulation parameters']['psi']
 n_class = len(psi)
 dmi = 2**(-psi).reshape(-1,1)
