@@ -29,8 +29,8 @@ sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
 from json_serializer import load_from_json
 
 #---------------------Path to the extended JSON output
-path = os.path.join(SCRIPT_DIR, "..", "cascade_results", "") 
-name_simu_ext = 'Vjosa_test_ext'
+path = r"C:\Users\matta\Documents\dcascade-py-2.0.0\cascade_results/"
+name_simu_ext = 'qgis_test_ext'
 
 #---------------------Folder to store the plots
 figure_folder = os.path.join(path, 'sediment_cores', '')
@@ -299,10 +299,15 @@ if __name__ == "__main__":
     print(f"Loading extended output from: {path + name_simu_ext}.json")
     data_output_ext = load_from_json(path + name_simu_ext + '.json')
     
+    # Load the main output for parameters
+    name_simu = name_simu_ext.replace('_ext', '')
+    print(f"Loading main output from: {path + name_simu}.json")
+    data_output = load_from_json(path + name_simu + '.json')
+    
     # Extract Qbi_dep and parameters
     Qbi_dep = data_output_ext['Qbi_dep [m^3]']
-    psi = data_output_ext['Simulation parameters']['psi']
-    n_reaches = data_output_ext['Simulation parameters']['n_reaches']
+    psi = data_output['Simulation parameters']['psi']
+    n_reaches = len(Qbi_dep[0])
     
     print(f"\nSimulation info:")
     print(f"  Number of reaches: {n_reaches}")
