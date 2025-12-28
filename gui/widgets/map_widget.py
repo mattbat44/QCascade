@@ -2,10 +2,11 @@ import json
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QDockWidget, QVBoxLayout, QWidget, QMessageBox,
-    QHBoxLayout, QPushButton, QMenu, QFileDialog, QGraphicsView, QGraphicsScene
+    QHBoxLayout, QPushButton, QMenu, QFileDialog, QGraphicsView, QGraphicsScene,
+    QFormLayout, QLineEdit, QLabel
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QPointF
-from PyQt6.QtGui import QPen, QColor, QPainterPath
+from PyQt6.QtGui import QPen, QColor, QPainterPath, QDoubleValidator
 import geopandas as gpd
 import pandas as pd
 
@@ -31,10 +32,32 @@ class MapWidget(QDockWidget):
         self.view.setRenderHints(self.view.renderHints())
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.view.setMouseTracking(True)
+        self.view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.view.viewport().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.view.viewport().customContextMenuRequested.connect(self.on_context_menu)
         self.view.mousePressEvent = self.on_mouse_press
+        self.view.wheelEvent = self.on_wheel
         self.layout.addWidget(self.view)
+
+        # Inline attribute editor for selected reach
+        self.attr_fields = {}
+        self.attr_editor = QWidget()
+        form = QFormLayout(self.attr_editor)
+        form.setContentsMargins(8, 4, 8, 4)
+        self.attr_order = ["Name", "Length", "Slope", "W", "D50", "D90"]
+        for key in self.attr_order:
+            line = QLineEdit()
+            if key != "Name":
+                line.setValidator(QDoubleValidator())
+            line.setPlaceholderText(f"Set {key}")
+            line.textChanged.connect(self.on_attr_changed)
+            self.attr_fields[key] = line
+            form.addRow(QLabel(key), line)
+        self.apply_attr_btn = QPushButton("Apply Attributes")
+        self.apply_attr_btn.setEnabled(False)
+        self.apply_attr_btn.clicked.connect(self.apply_attr_edits)
+        form.addWidget(self.apply_attr_btn)
+        self.layout.addWidget(self.attr_editor)
         
         self.setWidget(self.container)
         
@@ -45,6 +68,7 @@ class MapWidget(QDockWidget):
         self.reach_names = {}  # Dictionary to store custom reach names
         # External inputs mapping: {reach_idx: [csv_paths]}
         self.external_inputs_mapping = {}
+        self.items_by_reach = {}
         
         # Initialize empty scene
         self.refresh_map()
@@ -68,6 +92,10 @@ class MapWidget(QDockWidget):
         self.refresh_btn = QPushButton("Refresh Map")
         self.refresh_btn.clicked.connect(self.refresh_map)
         toolbar_layout.addWidget(self.refresh_btn)
+
+        self.fit_btn = QPushButton("Fit View")
+        self.fit_btn.clicked.connect(self.fit_full_extent)
+        toolbar_layout.addWidget(self.fit_btn)
         
         toolbar_layout.addStretch()
         
@@ -139,7 +167,10 @@ class MapWidget(QDockWidget):
                 continue
             pts = [QPointF(x * sx + tx, y * sy + ty) for x, y in geom.coords]
             # Create polyline
+            has_external = str(from_n) in self.external_inputs_mapping or from_n in self.external_inputs_mapping
             pen = QPen(QColor('#1f77b4'), 3)
+            if has_external:
+                pen = QPen(QColor('#2ca02c'), 3)
             if self.selected_reach_id == from_n:
                 pen = QPen(QColor('red'), 5)
             if not pts:
@@ -151,6 +182,7 @@ class MapWidget(QDockWidget):
             item.setData(0, from_n)
             self.items_by_reach[from_n] = item
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self.view.update()
     
     def refresh_map(self):
         """Refresh the map display."""
@@ -207,25 +239,39 @@ class MapWidget(QDockWidget):
         # Find nearest item by boundingRect contains
         found = None
         for from_n, item in self.items_by_reach.items():
-            if item.boundingRect().translated(item.pos()).contains(pos):
+            if item.shape().contains(item.mapFromScene(pos)):
                 found = from_n
                 break
         if found is not None:
             self.selected_reach_id = found
             self.render_map()
+            self.populate_attr_editor()
+            self.edit_btn.setEnabled(True)
+            self.apply_attr_btn.setEnabled(True)
         # call base behavior for panning
         return QGraphicsView.mousePressEvent(self.view, event)
+
+    def on_wheel(self, event):
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return QGraphicsView.wheelEvent(self.view, event)
+        factor = 1.25 if delta > 0 else 0.8
+        self.view.scale(factor, factor)
+        event.accept()
 
     def on_context_menu(self, pos):
         # Context menu relative to viewport
         menu = QMenu(self)
         edit_action = menu.addAction("Edit Selected Reach")
         attach_action = menu.addAction("Attach External Input CSV...")
+        zoom_action = menu.addAction("Zoom to Selected")
         action = menu.exec(self.view.viewport().mapToGlobal(pos))
         if action == edit_action:
             self.edit_selected_reach()
         elif action == attach_action:
             self.attach_external_csv()
+        elif action == zoom_action:
+            self.zoom_to_selected()
 
     def attach_external_csv(self):
         if self.selected_reach_id is None:
@@ -237,6 +283,56 @@ class MapWidget(QDockWidget):
         self.external_inputs_mapping.setdefault(int(self.selected_reach_id), []).append(file_path)
         self.save_external_inputs_mapping()
         QMessageBox.information(self, "Attached", f"Attached CSV to reach {self.selected_reach_id}.")
+        self.render_map()
+        self.populate_attr_editor()
+
+    def on_attr_changed(self, _text):
+        # Allow applying edits when user types
+        self.apply_attr_btn.setEnabled(True)
+
+    def populate_attr_editor(self):
+        if self.selected_reach_id is None or self.gdf is None:
+            for line in self.attr_fields.values():
+                line.clear()
+            return
+        reach_row = self.gdf[self.gdf['FromN'] == self.selected_reach_id]
+        if reach_row.empty:
+            return
+        data = reach_row.iloc[0].to_dict()
+        for key, line in self.attr_fields.items():
+            val = data.get(key, "")
+            line.setText("" if pd.isna(val) else str(val))
+
+    def apply_attr_edits(self):
+        if self.selected_reach_id is None or self.gdf is None:
+            return
+        updates = {}
+        for key, line in self.attr_fields.items():
+            text = line.text().strip()
+            if text == "":
+                continue
+            if key == "Name":
+                updates[key] = text
+            else:
+                try:
+                    updates[key] = float(text)
+                except ValueError:
+                    continue
+        if updates:
+            self.update_reach_data(self.selected_reach_id, updates)
+            self.save_btn.setEnabled(True)
+            self.apply_attr_btn.setEnabled(False)
+            self.populate_attr_editor()
+
+    def zoom_to_selected(self):
+        if self.selected_reach_id is None or self.selected_reach_id not in self.items_by_reach:
+            return
+        item = self.items_by_reach[self.selected_reach_id]
+        self.view.fitInView(item.sceneBoundingRect().adjusted(-10, -10, 10, 10), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def fit_full_extent(self):
+        if self.scene.itemsBoundingRect().isValid():
+            self.view.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
     
     def save_shapefile(self):
         """Save the modified geodataframe back to shapefile."""

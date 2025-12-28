@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import (
-    QMainWindow, QDockWidget, QLabel, QToolBar, QTextEdit, QMessageBox, QStatusBar
+    QMainWindow, QDockWidget, QLabel, QToolBar, QTextEdit, QMessageBox, QStatusBar,
+    QToolButton
 )
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QAction, QKeySequence
@@ -29,6 +30,9 @@ class MainWindow(QMainWindow):
         
         # Settings for persistence
         self.settings = QSettings('D-CASCADE', 'GUI')
+        self._focus_active = False
+        self._hidden_docks = []
+        self._focused_dock = None
         
         # Initialize UI
         self.init_ui()
@@ -128,6 +132,12 @@ class MainWindow(QMainWindow):
         self.log_dock.setWidget(self.log_text)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.log_dock)
 
+        # Track docks for focus management
+        self._all_docks = [
+            self.paths_dock, self.physics_dock, self.sediment_dock, self.time_dock, self.options_dock,
+            self.map_widget, self.discharge_editor, self.results_viewer, self.plot_widget, self.log_dock
+        ]
+
         # --- Connections ---
         self.paths_dock.shapefile_selected.connect(self.map_widget.load_shapefile)
         self.paths_dock.csv_path.textChanged.connect(self.discharge_editor.set_discharge_path)
@@ -153,6 +163,31 @@ class MainWindow(QMainWindow):
         load_results_action.setShortcut(QKeySequence("Ctrl+L"))
         load_results_action.triggered.connect(self.results_viewer.load_results)
         toolbar.addAction(load_results_action)
+        
+        toolbar.addSeparator()
+
+        # Focus view menu
+        focus_button = QToolButton(self)
+        focus_button.setText("Focus View")
+        focus_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.focus_menu = focus_button.menu() if focus_button.menu() else None
+        from PyQt6.QtWidgets import QMenu  # local import to avoid top clutter
+        if self.focus_menu is None:
+            self.focus_menu = QMenu(focus_button)
+            focus_button.setMenu(self.focus_menu)
+        self.add_focus_option("Map", self.map_widget)
+        self.add_focus_option("Discharge", self.discharge_editor)
+        self.add_focus_option("Results", self.results_viewer)
+        self.add_focus_option("Plots", self.plot_widget)
+        self.add_focus_option("Input Paths", self.paths_dock)
+        self.add_focus_option("Physics", self.physics_dock)
+        self.add_focus_option("Sediment", self.sediment_dock)
+        self.add_focus_option("Time", self.time_dock)
+        self.add_focus_option("Options", self.options_dock)
+        self.focus_menu.addSeparator()
+        restore_action = self.focus_menu.addAction("Restore Layout")
+        restore_action.triggered.connect(self.restore_focus_layout)
+        toolbar.addWidget(focus_button)
         
         toolbar.addSeparator()
         
@@ -315,6 +350,44 @@ class MainWindow(QMainWindow):
     def on_discharge_updated(self, path):
         """Handle discharge data update."""
         self.paths_dock.csv_path.setText(path)
+
+    def add_focus_option(self, label, dock):
+        if not hasattr(self, 'focus_menu') or self.focus_menu is None:
+            return
+        action = self.focus_menu.addAction(label)
+        action.triggered.connect(lambda _, d=dock: self.focus_on_dock(d))
+
+    def focus_on_dock(self, dock):
+        if dock is None:
+            return
+        # If already focused on this dock, toggle off
+        if self._focus_active and self._focused_dock == dock:
+            self.restore_focus_layout()
+            return
+        self.restore_focus_layout()
+        self._hidden_docks = []
+        for d in self._all_docks:
+            if d is dock:
+                continue
+            if d.isVisible():
+                self._hidden_docks.append(d)
+                d.hide()
+        dock.raise_()
+        dock.setFloating(True)
+        dock.show()
+        dock.resize(self.width() - 40, self.height() - 80)
+        self._focus_active = True
+        self._focused_dock = dock
+        self.statusBar().showMessage(f"Focused on {dock.windowTitle()}. Click Restore Layout to return.", 4000)
+
+    def restore_focus_layout(self):
+        if self._focused_dock and self._focused_dock.isFloating():
+            self._focused_dock.setFloating(False)
+        for d in self._hidden_docks:
+            d.show()
+        self._hidden_docks = []
+        self._focus_active = False
+        self._focused_dock = None
 
     def closeEvent(self, event):
         """Save state before closing."""
