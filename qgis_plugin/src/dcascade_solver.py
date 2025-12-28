@@ -165,7 +165,12 @@ class DSCASCADE_MAIN:
 
                 # Mobilise:
                 tr_cap_overbank = None
-                if overbank_Q is not None and h_overbank is not None and Q[t, n] > overbank_Q[t, n]:
+                if (
+                    overbank_Q is not None
+                    and h_overbank is not None
+                    and not np.isnan(overbank_Q[t, n])
+                    and Q[t, n] > overbank_Q[t, n]
+                ):
                     calculator_overbank = TransportCapacityCalculator(
                         Fi_al, D50_al, SedimSys.slope[t, n],
                         overbank_Q[t, n], SedimSys.width[t, n], v_overbank[n], h_overbank[n],
