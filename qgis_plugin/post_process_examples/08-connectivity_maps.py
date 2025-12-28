@@ -31,7 +31,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(SCRIPT_DIR, '../src')))
 
 from json_serializer import load_from_json
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from preprocessing import extract_Q, read_network                     
 from reach_data import ReachData
 

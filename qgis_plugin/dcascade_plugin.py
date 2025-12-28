@@ -650,8 +650,7 @@ class DCascadePlugin:
     def on_load_run_requested(self, path):
         """Attempt to extract config from a run results file and load it."""
         try:
-            with open(path, "r") as f:
-                data = load_from_json(path)
+            data = load_from_json(path)
 
             config_dict = None
             if isinstance(data, dict):
