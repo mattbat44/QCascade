@@ -20,6 +20,7 @@ from d_finder import D_finder
 from flow_depth import choose_flow_depth
 from sedimentary_system import SedimentarySystem
 from slope_reduction import choose_slope_reduction
+from transport_capacity_calculator import TransportCapacityCalculator
 from width_variation import choose_width_variation
 
 
@@ -68,7 +69,7 @@ class DSCASCADE_MAIN:
         self.vel_height_option = vel_height_option
 
 
-    def run(self, Q, roundpar):
+    def run(self, Q, roundpar, overbank_Q=None):
 
         SedimSys = self.sedim_sys
 
@@ -81,6 +82,12 @@ class DSCASCADE_MAIN:
             # Define flow depth and flow velocity for all reaches at this time step:
             h, v = choose_flow_depth(self.reach_data, SedimSys, Q, t, self.indx_flo_depth)
             SedimSys.flow_depth[t] = h
+
+            # If an overbank discharge matrix is provided, pre-compute corresponding depths/velocities
+            if overbank_Q is not None:
+                h_overbank, v_overbank = choose_flow_depth(self.reach_data, SedimSys, overbank_Q, t, self.indx_flo_depth)
+            else:
+                h_overbank = v_overbank = None
 
             # Compute velocity section height (may be dependant on the water depth)
             SedimSys.set_velocity_section_height(self.vel_height_option, h, t)
@@ -147,8 +154,8 @@ class DSCASCADE_MAIN:
 
                 # Compute transport capacity
                 tr_cap_per_s, Fi_al, D50_al, Qc = SedimSys.compute_transport_capacity(Vdep_init, roundpar, t, n, Q, v, h,
-                                                                                  self.indx_tr_cap, self.indx_tr_partition,
-                                                                                  passing_cascades = Qbi_pass[n])
+                                                                                   self.indx_tr_cap, self.indx_tr_partition,
+                                                                                   passing_cascades = Qbi_pass[n])
 
                 # Store transport capacity and active layer informations:
                 SedimSys.Fi_al[t, n, :] = Fi_al
@@ -157,9 +164,21 @@ class DSCASCADE_MAIN:
                 SedimSys.tr_cap[t, n, :] = tr_cap_per_s * self.ts_length
 
                 # Mobilise:
-                Vmob, Qbi_pass[n], Vdep_end = SedimSys.compute_mobilised_volumes(Vdep_init, tr_cap_per_s,
-                                                                                     n, t, roundpar,
-                                                                                     passing_cascades = Qbi_pass[n])
+                tr_cap_overbank = None
+                if overbank_Q is not None and h_overbank is not None and Q[t, n] > overbank_Q[t, n]:
+                    calculator_overbank = TransportCapacityCalculator(
+                        Fi_al, D50_al, SedimSys.slope[t, n],
+                        overbank_Q[t, n], SedimSys.width[t, n], v_overbank[n], h_overbank[n],
+                        SedimSys.psi, self.reach_data.roughness[n],
+                    )
+                    tr_cap_overbank_per_s, _ = calculator_overbank.tr_cap_function(self.indx_tr_cap, self.indx_tr_partition)
+                    tr_cap_overbank = tr_cap_overbank_per_s * self.ts_length
+
+                Vmob, Qbi_pass[n], Vdep_end = SedimSys.compute_mobilised_volumes(
+                    Vdep_init, tr_cap_per_s, n, t, roundpar,
+                    passing_cascades=Qbi_pass[n],
+                    tr_cap_overbank=tr_cap_overbank,
+                )
 
                 ###-----Step 3: Finalisation.
                 # Add the cascades that were mobilised from this reach to Qbi_pass[n]:
