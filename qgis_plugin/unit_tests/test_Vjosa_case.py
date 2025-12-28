@@ -24,7 +24,7 @@ from reach_data import ReachData
 
 # get the root of the project
 # for github actions
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 ''' List of tests performed here:

@@ -938,6 +938,43 @@ class SedimentarySystem:
         return V_mob, passing_cascades, Vdep_new
 
 
+    def merge_cascades(self, passing_cascades, V_mob, roundpar, n_classes):
+        """Merge newly mobilised volumes into the list of passing cascades.
+
+        @param passing_cascades existing list of Cascade objects (may be None/empty)
+        @param V_mob mobilised volume matrix (may be None)
+        @param roundpar rounding parameter (decimals) for sediment volumes
+        @param n_classes number of sediment classes (for elapsed_time length)
+        """
+        if passing_cascades is None:
+            passing_cascades = []
+
+        if V_mob is None:
+            return passing_cascades
+
+        # Ensure 2D array
+        if V_mob.ndim == 1:
+            V_mob = V_mob.reshape(1, -1)
+
+        # Skip empty volumes
+        if V_mob.size == 0 or np.all(self.sediments(V_mob) == 0):
+            return passing_cascades
+
+        # Round mobilised sediment if requested
+        if not np.isnan(roundpar):
+            self.sediments(V_mob)[:] = np.around(self.sediments(V_mob), decimals=roundpar)
+
+        # Create cascades from each mobilised layer
+        for row in V_mob:
+            # metadata already in first columns; provenance is first metadata entry
+            provenance = int(self.provenance(row)) if row.size > 0 else 0
+            elapsed_time = np.zeros(n_classes)
+            cascade = Cascade(provenance, elapsed_time, row.reshape(1, -1))
+            passing_cascades.append(cascade)
+
+        return passing_cascades
+
+
 
     def layer_search(self, V_dep_old, V_lim, Qpass_volume = None, roundpar = None):
         """

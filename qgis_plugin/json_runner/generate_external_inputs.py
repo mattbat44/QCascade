@@ -24,10 +24,10 @@ import sys
 from pathlib import Path
 import numpy as np
 
-# Add src to path
+# Add src to path first so dcascade module resolves to bundled src
 CURRENT_DIR = Path(__file__).parent
 SRC_PATH = CURRENT_DIR.parent / 'src'
-sys.path.append(str(SRC_PATH))
+sys.path.insert(0, str(SRC_PATH))
 
 from external_inputs_builder import (
     build_external_inputs_from_csv,

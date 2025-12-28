@@ -68,22 +68,28 @@ def validate_config(config):
     is_valid = True
 
     for section, fields in schema.items():
-        if section not in config:
-            # 'external_inputs' is optional; skip if absent
+        if section not in config or config.get(section) is None:
+            # 'external_inputs' is optional; skip if absent/None
             if section == "external_inputs":
                 continue
             print(f"Error: Missing section '{section}' in config.", file=sys.stderr)
             is_valid = False
             continue
+
+        section_data = config[section]
+        if not isinstance(section_data, dict):
+            print(f"Error: Section '{section}' must be an object/dictionary.", file=sys.stderr)
+            is_valid = False
+            continue
         
         for field, rules in fields.items():
-            if field not in config[section]:
+            if field not in section_data:
                 if rules.get("required", False):
                     print(f"Error: Missing required field '{field}' in section '{section}'.", file=sys.stderr)
                     is_valid = False
                 continue
             
-            value = config[section][field]
+            value = section_data[field]
             
             # Type check
             expected_type = rules["type"]

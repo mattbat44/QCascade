@@ -23,7 +23,7 @@ from slope_reduction import choose_slope_reduction
 from width_variation import choose_width_variation
 
 
-class DCASCADE:
+class DSCASCADE_MAIN:
     """
     @brief Main class of the D-CASCADE code. Used to run the algorithm and transfer sediments.
 

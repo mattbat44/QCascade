@@ -13,7 +13,7 @@ This script was adapted from the Matlab version by Marco Tangi
 
 import itertools
 
-from dcascade import DCASCADE
+from dcascade_solver import DSCASCADE_MAIN
 from sedimentary_system import SedimentarySystem
 
 """ MAIN FUNCTION SECTION """
@@ -95,7 +95,7 @@ def DCASCADE_main(reach_data, network, Q, psi, timescale, ts_length, al_depth,
 
 
     # Create DCASCADE solver
-    dcascade = DCASCADE(sedimentary_system)
+    dcascade = DSCASCADE_MAIN(sedimentary_system)
 
     # Set sediment transport solving options
     dcascade.set_hydraulic_options(indx_flo_depth)

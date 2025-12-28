@@ -6,10 +6,12 @@
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QFormLayout, QLineEdit, QPushButton, 
     QComboBox, QSpinBox, QDoubleSpinBox, QFileDialog, QCheckBox, 
-    QHBoxLayout, QLabel, QTabWidget, QListWidget, QVBoxLayout, QMessageBox
+    QHBoxLayout, QLabel, QTabWidget, QListWidget, QVBoxLayout, QMessageBox,
+    QSpacerItem, QSizePolicy
 )
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.gui import QgsMapLayerComboBox
+from qgis.core import QgsMapLayerProxyModel
 import os
 
 
@@ -19,6 +21,10 @@ class ParametersDock(QDockWidget):
     layer_selected = pyqtSignal(object)  # Emits QgsVectorLayer
     external_input_added = pyqtSignal(int, str)  # reach_idx, csv_path
     discharge_path_changed = pyqtSignal(str)
+    run_requested = pyqtSignal()
+    save_config_requested = pyqtSignal(str)
+    load_config_requested = pyqtSignal(str)
+    load_run_requested = pyqtSignal(str)
     
     def __init__(self, parent=None):
         super().__init__("D-CASCADE Parameters", parent)
@@ -63,7 +69,7 @@ class ParametersDock(QDockWidget):
         
         # River Network Layer (QGIS layer selector)
         self.layer_combo = QgsMapLayerComboBox()
-        self.layer_combo.setFilters(QgsMapLayerComboBox.FilterVectorLayer)
+        self.layer_combo.setFilters(QgsMapLayerProxyModel.VectorLayer)
         self.layer_combo.layerChanged.connect(self.on_layer_changed)
         layout.addRow("River Network Layer:", self.layer_combo)
         
@@ -98,7 +104,22 @@ class ParametersDock(QDockWidget):
         out_layout.addWidget(self.output_dir_btn)
         layout.addRow("Output Directory:", out_layout)
         
-        layout.addItem(QWidget())  # Spacer
+        # Actions row
+        actions_layout = QHBoxLayout()
+        self.load_cfg_btn = QPushButton("Load Config...")
+        self.load_cfg_btn.clicked.connect(self.on_load_config_clicked)
+        self.load_run_btn = QPushButton("Load From Run...")
+        self.load_run_btn.clicked.connect(self.on_load_run_clicked)
+        self.save_btn = QPushButton("Save Config...")
+        self.save_btn.clicked.connect(self.on_save_clicked)
+        self.run_btn = QPushButton("Run Simulation")
+        self.run_btn.clicked.connect(lambda: self.run_requested.emit())
+        for btn in (self.load_cfg_btn, self.load_run_btn, self.save_btn, self.run_btn):
+            actions_layout.addWidget(btn)
+        layout.addRow("Actions:", actions_layout)
+
+        # Spacer to keep layout tidy if more widgets are added later
+        layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
         
         return tab
     
@@ -173,6 +194,24 @@ class ParametersDock(QDockWidget):
         layout.addRow("Update Slope:", self.update_slope)
         
         return tab
+
+    def on_save_clicked(self):
+        """Ask for path and emit save request."""
+        path, _ = QFileDialog.getSaveFileName(self, "Save D-CASCADE config", "config.json", "JSON Files (*.json)")
+        if path:
+            self.save_config_requested.emit(path)
+
+    def on_load_config_clicked(self):
+        """Ask for config json and emit load request."""
+        path, _ = QFileDialog.getOpenFileName(self, "Load D-CASCADE config", "", "JSON Files (*.json)")
+        if path:
+            self.load_config_requested.emit(path)
+
+    def on_load_run_clicked(self):
+        """Ask for model run pickle and emit load request."""
+        path, _ = QFileDialog.getOpenFileName(self, "Load from run file", "", "Run Results (*.p *.pkl *.pickle);;All Files (*.*)")
+        if path:
+            self.load_run_requested.emit(path)
     
     def create_sediment_tab(self):
         """Create the sediment parameters tab."""

@@ -4,11 +4,12 @@
 """
 
 from qgis.PyQt.QtCore import Qt, QSettings
-from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog, QMenu, QToolButton
 from qgis.core import QgsProject, QgsVectorLayer, QgsMessageLog, Qgis, QgsGraduatedSymbolRenderer, QgsSymbol, QgsStyle, QgsStyle
 from qgis.gui import QgsMapToolIdentifyFeature
 import os
 import json
+import pickle
 from pathlib import Path
 
 from .docks.parameters_dock import ParametersDock
@@ -24,10 +25,17 @@ class DCascadePlugin:
         """Initialize the plugin."""
         self.iface = iface
         self.canvas = iface.mapCanvas()
+
+        # Track initialization to keep init_plugin idempotent when QGIS calls initGui.
+        self.initialized = False
         
         # Plugin components
         self.parameters_dock = None
         self.results_viewer_dock = None
+        self.toolbar_button = None
+        self.toolbar_widget_action = None
+        self.parameters_action = None
+        self.results_action = None
         
         # Layer and selection tracking
         self.network_layer = None
@@ -38,9 +46,19 @@ class DCascadePlugin:
         
         # Initialize plugin
         self.init_plugin()
+
+    def initGui(self):
+        """QGIS hook: ensure plugin is initialized when loaded."""
+        self.init_plugin()
     
     def init_plugin(self):
         """Initialize plugin components."""
+        if self.initialized:
+            return
+
+        # Clean up any stale toolbar items from previous loads
+        self.remove_toolbar_items()
+
         # Create dock widgets
         self.parameters_dock = ParametersDock(self.iface.mainWindow())
         self.results_viewer_dock = ResultsViewerDock(self.iface.mainWindow())
@@ -55,6 +73,10 @@ class DCascadePlugin:
         # Connect signals
         self.parameters_dock.layer_selected.connect(self.on_layer_selected)
         self.parameters_dock.external_input_added.connect(self.on_external_input_added)
+        self.parameters_dock.run_requested.connect(self.run_simulation)
+        self.parameters_dock.save_config_requested.connect(self.on_save_config_requested)
+        self.parameters_dock.load_config_requested.connect(self.on_load_config_requested)
+        self.parameters_dock.load_run_requested.connect(self.on_load_run_requested)
         
         self.results_viewer_dock.time_step_changed.connect(self.on_time_step_changed)
         self.results_viewer_dock.reach_selected_for_graph.connect(self.graph_reach)
@@ -62,20 +84,45 @@ class DCascadePlugin:
         # Connect map canvas selection
         self.canvas.selectionChanged.connect(self.on_map_selection_changed)
         
-        # Add toolbar action
-        self.action = QAction("D-CASCADE", self.iface.mainWindow())
-        self.action.setObjectName("DCascadeAction")
-        self.action.triggered.connect(self.run)
-        self.iface.addToolBarIcon(self.action)
-        self.iface.addPluginToMenu("&D-CASCADE", self.action)
+        # Dropdown menu under a single D-CASCADE toolbar button
+        self.parameters_action = QAction("Show Parameters", self.iface.mainWindow())
+        self.parameters_action.setObjectName("DCascadeParametersAction")
+        self.parameters_action.triggered.connect(self.show_parameters_dock)
+
+        self.results_action = QAction("Show Results", self.iface.mainWindow())
+        self.results_action.setObjectName("DCascadeResultsAction")
+        self.results_action.triggered.connect(self.show_results_dock)
+
+        menu = QMenu()
+        menu.addAction(self.parameters_action)
+        menu.addAction(self.results_action)
+
+        self.toolbar_button = QToolButton()
+        self.toolbar_button.setText("D-CASCADE")
+        self.toolbar_button.setMenu(menu)
+        self.toolbar_button.setPopupMode(QToolButton.InstantPopup)
+        self.toolbar_button.setToolTip("D-CASCADE tools")
+
+        # Place the dropdown button on the toolbar in order
+        self.toolbar_widget_action = self.iface.addToolBarWidget(self.toolbar_button)
+
+        # Add plugin menu entries
+        self.iface.addPluginToMenu("&D-CASCADE", self.parameters_action)
+        self.iface.addPluginToMenu("&D-CASCADE", self.results_action)
         
         QgsMessageLog.logMessage("D-CASCADE plugin initialized", "D-CASCADE", Qgis.Info)
+        self.initialized = True
     
     def unload(self):
         """Unload the plugin."""
-        # Remove menu and toolbar
-        self.iface.removePluginMenu("&D-CASCADE", self.action)
-        self.iface.removeToolBarIcon(self.action)
+        # Remove menu entries
+        if self.parameters_action:
+            self.iface.removePluginMenu("&D-CASCADE", self.parameters_action)
+        if self.results_action:
+            self.iface.removePluginMenu("&D-CASCADE", self.results_action)
+
+        # Remove toolbar items
+        self.remove_toolbar_items()
         
         # Remove docks
         if self.parameters_dock:
@@ -100,6 +147,34 @@ class DCascadePlugin:
         # If showing, add toolbar buttons
         if self.parameters_dock.isVisible():
             self.add_toolbar_actions()
+
+    def show_parameters_dock(self):
+        """Show parameters dock from toolbar action."""
+        if self.parameters_dock:
+            self.parameters_dock.setVisible(True)
+            self.parameters_dock.raise_()
+
+    def show_results_dock(self):
+        """Show results dock from toolbar action."""
+        if self.results_viewer_dock:
+            self.results_viewer_dock.setVisible(True)
+            self.results_viewer_dock.raise_()
+
+    def remove_toolbar_items(self):
+        """Remove any toolbar items we may have added (dropdown or legacy)."""
+        # Remove dropdown widget if present
+        if self.toolbar_widget_action:
+            self.iface.removeToolBarIcon(self.toolbar_widget_action)
+            self.toolbar_widget_action = None
+        self.toolbar_button = None
+
+        # Remove any legacy actions if still around
+        for act in [getattr(self, "action", None), self.parameters_action, self.results_action, getattr(self, "run_action", None)]:
+            if act:
+                try:
+                    self.iface.removeToolBarIcon(act)
+                except Exception:
+                    pass
     
     def add_toolbar_actions(self):
         """Add action buttons to toolbar."""
@@ -412,6 +487,143 @@ class DCascadePlugin:
             options=options,
             external_inputs=ext_cfg
         )
+
+    def on_save_config_requested(self, path):
+        """Save current configuration to user-selected path."""
+        config = self.collect_config()
+        if config is None:
+            return
+        try:
+            config.to_json(path)
+            QMessageBox.information(
+                self.iface.mainWindow(),
+                "Configuration Saved",
+                f"Saved configuration to:\n{path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "Save Failed",
+                str(e)
+            )
+
+    def on_load_config_requested(self, path):
+        """Load parameters from a config JSON into the UI."""
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            cfg = DCascadeConfig(**data)
+            self.apply_config_to_ui(cfg)
+            QMessageBox.information(
+                self.iface.mainWindow(),
+                "Configuration Loaded",
+                f"Loaded configuration from:\n{path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "Load Failed",
+                str(e)
+            )
+
+    def on_load_run_requested(self, path):
+        """Attempt to extract config from a run results file and load it."""
+        try:
+            with open(path, "rb") as f:
+                data = pickle.load(f)
+
+            config_dict = None
+            if isinstance(data, dict):
+                if "config" in data and isinstance(data["config"], dict):
+                    config_dict = data["config"]
+                elif "config_path" in data and Path(data["config_path"]).exists():
+                    with open(data["config_path"], "r") as cf:
+                        config_dict = json.load(cf)
+
+            if config_dict is None:
+                raise ValueError("No embedded config found in run file")
+
+            cfg = DCascadeConfig(**config_dict)
+            self.apply_config_to_ui(cfg)
+            QMessageBox.information(
+                self.iface.mainWindow(),
+                "Configuration Loaded",
+                f"Loaded configuration from run file:\n{path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "Load Failed",
+                str(e)
+            )
+
+    def apply_config_to_ui(self, cfg: DCascadeConfig):
+        """Populate parameter dock fields from a DCascadeConfig model."""
+        pdock = self.parameters_dock
+        if pdock is None:
+            return
+
+        # Paths
+        pdock.csv_path.setText(cfg.paths.discharge_csv or "")
+        pdock.output_name.setText(cfg.paths.output_name or "")
+        pdock.output_dir.setText(cfg.paths.output_dir or "")
+
+        # Sediment
+        if hasattr(pdock, "min_phi"):
+            pdock.min_phi.setValue(cfg.sediment.range[0])
+        if hasattr(pdock, "max_phi"):
+            pdock.max_phi.setValue(cfg.sediment.range[1])
+        if hasattr(pdock, "n_classes"):
+            pdock.n_classes.setValue(cfg.sediment.n_classes)
+        if hasattr(pdock, "dep_layer"):
+            pdock.dep_layer.setValue(cfg.sediment.deposit_layer_thickness)
+        if hasattr(pdock, "act_layer"):
+            pdock.act_layer.setText(str(cfg.sediment.active_layer_depth))
+
+        # Time
+        if hasattr(pdock, "timescale"):
+            pdock.timescale.setValue(cfg.time.timescale)
+        if hasattr(pdock, "ts_length"):
+            pdock.ts_length.setValue(cfg.time.ts_length)
+
+        # Physics combos are stored as "N: Name"; select by leading number
+        self._select_combo_by_prefix(pdock.tr_cap, cfg.physics.transport_capacity_formula)
+        self._select_combo_by_prefix(pdock.tr_part, cfg.physics.transport_partitioning)
+        self._select_combo_by_prefix(pdock.flow_depth, cfg.physics.flow_depth_formula)
+        self._select_combo_by_prefix(pdock.vel_formula, cfg.physics.velocity_formula)
+        self._select_combo_by_prefix(pdock.slope_red, cfg.physics.slope_reduction)
+        self._select_combo_by_prefix(pdock.width_calc, cfg.physics.width_calculation)
+
+        if hasattr(pdock, "update_slope"):
+            pdock.update_slope.setChecked(bool(cfg.physics.update_slope))
+
+        # Options
+        if hasattr(pdock, "save_dep"):
+            idx = pdock.save_dep.findText(cfg.options.save_deposit_layer)
+            if idx >= 0:
+                pdock.save_dep.setCurrentIndex(idx)
+        if hasattr(pdock, "round_param"):
+            pdock.round_param.setValue(cfg.options.round_parameter)
+        if hasattr(pdock, "force_pass"):
+            pdock.force_pass.setChecked(bool(cfg.options.force_pass_external_inputs))
+
+        # External inputs (best-effort for simple fields)
+        if cfg.external_inputs and hasattr(pdock, "ext_inputs_dir"):
+            pdock.ext_inputs_dir.setText(cfg.external_inputs.dir or "")
+            if hasattr(pdock, "ext_inputs_npy"):
+                pdock.ext_inputs_npy.setText(cfg.external_inputs.tensor_npy or "")
+            if hasattr(pdock, "ext_inputs_csv") and cfg.external_inputs.csv_files:
+                pdock.ext_inputs_csv.setText(cfg.external_inputs.csv_files[0] or "")
+
+    def _select_combo_by_prefix(self, combo, value):
+        """Select first entry whose text starts with 'value:'"""
+        if combo is None:
+            return
+        target = f"{value}:"
+        for i in range(combo.count()):
+            if combo.itemText(i).startswith(target):
+                combo.setCurrentIndex(i)
+                return
     
     def on_log_message(self, msg):
         """Handle log message from simulation thread."""
