@@ -780,9 +780,9 @@ class DCascadePlugin:
             
             # Construct results path
             if Path(output_dir).is_absolute():
-                results_path = Path(output_dir) / f"{output_name}.p"
+                results_path = Path(output_dir) / f"{output_name}.json"
             else:
-                results_path = Path.cwd() / output_dir / f"{output_name}.p"
+                results_path = Path.cwd() / output_dir / f"{output_name}.json"
             
             if results_path.exists():
                 self.results_viewer_dock.load_results_from_path(str(results_path))

@@ -251,6 +251,14 @@ def run_simulation(config_path):
         force_pass_external_inputs=opts.get('force_pass_external_inputs', False),
         overbank_Q=overbank_Q,
     )
+
+    # Add reach_id mapping to output
+    # This ensures we know which reach index corresponds to which ID (FromN or explicit reach_id)
+    if reach_data.reach_id is not None:
+        data_output['reach_id'] = reach_data.reach_id
+    else:
+        data_output['reach_id'] = reach_data.from_n
+
     print("Simulation completed.")
 
     # Save outputs to a logical destination. Prefer `paths.output_dir` if provided,

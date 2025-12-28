@@ -24,7 +24,7 @@ from pathlib import Path
 src_path = Path(__file__).parent.parent / 'src'
 sys.path.insert(0, str(src_path))
 
-from json_serializer import load_from_json
+from json_serializer import load_from_json, save_to_json
 
 
 class ResultsViewerDock(QDockWidget):
@@ -90,7 +90,7 @@ class ResultsViewerDock(QDockWidget):
         # Top toolbar
         toolbar_layout = QHBoxLayout()
         
-        self.load_btn = QPushButton("Load Results (.p)")
+        self.load_btn = QPushButton("Load Results (.json)")
         self.load_btn.clicked.connect(self.load_results)
         toolbar_layout.addWidget(self.load_btn)
         
@@ -99,7 +99,7 @@ class ResultsViewerDock(QDockWidget):
         self.main_layout.addLayout(toolbar_layout)
         
         # Info label
-        self.info_label = QLabel("No results loaded. Run a simulation or load a .p file.")
+        self.info_label = QLabel("No results loaded. Run a simulation or load a .json file.")
         self.main_layout.addWidget(self.info_label)
         
         # Tabs for different visualization types
@@ -362,6 +362,45 @@ class ResultsViewerDock(QDockWidget):
         self.time_step_changed.emit(value)
         self.update_dynamic_plot()
     
+    def _load_with_fallback(self, file_path):
+        """Helper to load file with fallback to pickle for legacy files."""
+        try:
+            return load_from_json(file_path)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            # Try legacy pickle load
+            try:
+                import pickle
+                with open(file_path, 'rb') as f:
+                    data = pickle.load(f)
+                
+                # Ask user to convert
+                reply = QMessageBox.question(
+                    self,
+                    "Legacy File Detected",
+                    f"The file '{Path(file_path).name}' appears to be in a legacy binary format (pickle).\n\n"
+                    "Would you like to convert it to the new JSON format for better compatibility?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                
+                if reply == QMessageBox.Yes:
+                    try:
+                        # Determine new path
+                        p = Path(file_path)
+                        if p.suffix == '.json':
+                            new_path = p 
+                        else:
+                            new_path = p.with_suffix('.json')
+                            
+                        save_to_json(data, new_path)
+                        QMessageBox.information(self, "Success", f"Converted and saved to:\n{new_path}")
+                    except Exception as save_err:
+                        QMessageBox.warning(self, "Conversion Failed", f"Could not save JSON: {save_err}")
+                
+                return data
+            except Exception:
+                raise
+
     def load_results(self):
         """Load results from JSON file."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -375,18 +414,23 @@ class ResultsViewerDock(QDockWidget):
             return
         
         try:
-            self.results_data = load_from_json(file_path)
+            self.results_data = self._load_with_fallback(file_path)
             
             # Try to load extended results
-            ext_path = file_path.replace('.p', '_ext.p')
-            if Path(ext_path).exists():
-                try:
-                    with open(ext_path, 'rb') as f:
-                        self.results_data_ext = pickle.load(f)
-                except Exception:
-                    self.results_data_ext = None
-            else:
-                self.results_data_ext = None
+            p = Path(file_path)
+            ext_candidates = [
+                p.with_name(p.stem + '_ext.json'),
+                p.with_name(p.stem + '_ext.p')
+            ]
+            
+            self.results_data_ext = None
+            for ext_path in ext_candidates:
+                if ext_path.exists():
+                    try:
+                        self.results_data_ext = self._load_with_fallback(ext_path)
+                        break
+                    except Exception:
+                        continue
 
             self.results_path = file_path
             
@@ -413,18 +457,23 @@ class ResultsViewerDock(QDockWidget):
         if Path(path).exists():
             self.results_path = path
             try:
-                self.results_data = load_from_json(path)
+                self.results_data = self._load_with_fallback(path)
                 
                 # Try to load extended results
-                ext_path = path.replace('.p', '_ext.p')
-                if Path(ext_path).exists():
-                    try:
-                        with open(ext_path, 'rb') as f:
-                            self.results_data_ext = pickle.load(f)
-                    except Exception:
-                        self.results_data_ext = None
-                else:
-                    self.results_data_ext = None
+                p = Path(path)
+                ext_candidates = [
+                    p.with_name(p.stem + '_ext.json'),
+                    p.with_name(p.stem + '_ext.p')
+                ]
+                
+                self.results_data_ext = None
+                for ext_path in ext_candidates:
+                    if ext_path.exists():
+                        try:
+                            self.results_data_ext = self._load_with_fallback(ext_path)
+                            break
+                        except Exception:
+                            continue
 
                 self.update_ui_with_results()
             except Exception as e:
@@ -448,12 +497,56 @@ class ResultsViewerDock(QDockWidget):
             if isinstance(arr, np.ndarray) and arr.size > 0:
                 self.data_ranges[name] = (np.nanmin(arr), np.nanmax(arr))
         
+        # Build reach ID map
+        self.reach_ids = []
+        self.reach_id_map = {}
+        
+        if 'reach_id' in self.results_data:
+            # Use provided IDs
+            r_ids = self.results_data['reach_id']
+            # Handle if it's a list or array
+            if isinstance(r_ids, np.ndarray):
+                r_ids = r_ids.tolist()
+            
+            self.reach_ids = [str(x) for x in r_ids]
+            self.reach_id_map = {str(x): i for i, x in enumerate(r_ids)}
+        else:
+            # Try to infer from network layer if available
+            inferred = False
+            if self.network_layer:
+                try:
+                    from_n_idx = self.network_layer.fields().indexFromName('FromN')
+                    if from_n_idx >= 0:
+                        from_ns = []
+                        for f in self.network_layer.getFeatures():
+                            val = f.attribute(from_n_idx)
+                            if val is not None:
+                                from_ns.append(int(val))
+                        
+                        # Sort to match simulation order (D-CASCADE sorts by FromN)
+                        sorted_ids = sorted(from_ns)
+                        
+                        # Verify length matches data
+                        if 'Volume out [m^3]' in self.results_data:
+                             if len(sorted_ids) == self.results_data['Volume out [m^3]'].shape[1]:
+                                self.reach_ids = [str(x) for x in sorted_ids]
+                                self.reach_id_map = {str(x): i for i, x in enumerate(sorted_ids)}
+                                inferred = True
+                                QgsMessageLog.logMessage("Inferred reach IDs from network layer.", "D-CASCADE", Qgis.Info)
+                except Exception as e:
+                    QgsMessageLog.logMessage(f"Could not infer IDs: {e}", "D-CASCADE", Qgis.Warning)
+            
+            if not inferred and 'Volume out [m^3]' in self.results_data:
+                # Fallback: 1-based index
+                num_reaches = self.results_data['Volume out [m^3]'].shape[1]
+                self.reach_ids = [str(i+1) for i in range(num_reaches)]
+                self.reach_id_map = {str(i+1): i for i in range(num_reaches)}
+
         # Update reach selector for time series
         if 'Volume out [m^3]' in self.results_data:
-            num_reaches = self.results_data['Volume out [m^3]'].shape[1]
             self.ts_reach_combo.clear()
-            for i in range(num_reaches):
-                self.ts_reach_combo.addItem(f"Reach {i+1}")
+            for rid in self.reach_ids:
+                self.ts_reach_combo.addItem(f"Reach {rid}")
             self.ts_reach_combo.setEnabled(True)
             
             # Update time slider
@@ -556,12 +649,8 @@ class ResultsViewerDock(QDockWidget):
                 reach_list = []
                 if self.selected_reaches:
                     for rid in self.selected_reaches:
-                        try:
-                            idx = int(rid) - 1
-                            if 0 <= idx < node_el.shape[1]:
-                                reach_list.append(idx)
-                        except Exception:
-                            continue
+                        if rid in self.reach_id_map:
+                            reach_list.append(self.reach_id_map[rid])
                 if not reach_list:
                     reach_list = [self.ts_reach_combo.currentIndex()] if self.ts_reach_combo.count() else []
                 
@@ -589,7 +678,8 @@ class ResultsViewerDock(QDockWidget):
                         else:
                             label_suffix = ""
                             
-                        ax.plot(y_vals, label=f'Reach {idx+1} {label_suffix}', linewidth=2)
+                        rid_label = self.reach_ids[idx] if idx < len(self.reach_ids) else str(idx+1)
+                        ax.plot(y_vals, label=f'Reach {rid_label} {label_suffix}', linewidth=2)
                 
                 ax.set_title(f"{variable} - Time Series")
                 ax.set_xlabel("Time Step")
@@ -613,14 +703,11 @@ class ResultsViewerDock(QDockWidget):
             
             reach_list = []
             if self.selected_reaches:
-                # Map FromN values to indices
+                # Map FromN values to indices using reach_id_map
                 for rid in self.selected_reaches:
-                    try:
-                        idx = int(rid) - 1
-                        if 0 <= idx < data.shape[1]:
-                            reach_list.append(idx)
-                    except Exception:
-                        continue
+                    if rid in self.reach_id_map:
+                        reach_list.append(self.reach_id_map[rid])
+            
             if not reach_list:
                 if self.ts_multi_check.isChecked():
                     reach_list = list(range(min(10, data.shape[1])))
@@ -629,7 +716,8 @@ class ResultsViewerDock(QDockWidget):
 
             for idx in reach_list:
                 if 0 <= idx < data.shape[1]:
-                    ax.plot(data[:, idx], label=f'Reach {idx+1}', linewidth=2)
+                    rid_label = self.reach_ids[idx] if idx < len(self.reach_ids) else str(idx+1)
+                    ax.plot(data[:, idx], label=f'Reach {rid_label}', linewidth=2)
             
             ax.set_title(f"{variable} - Time Series")
             ax.set_xlabel("Time Step")
@@ -710,7 +798,7 @@ class ResultsViewerDock(QDockWidget):
                 else:
                     spatial_data = np.mean(data, axis=0)
                 
-                reach_labels = [f"R{i+1}" for i in range(len(spatial_data))]
+                reach_labels = [f"R{self.reach_ids[i]}" if i < len(self.reach_ids) else f"R{i+1}" for i in range(len(spatial_data))]
                 ax.bar(reach_labels, spatial_data, color='steelblue')
                 
                 ax.set_title(f"{variable} - {agg_method.title()} Along Reaches")
@@ -746,19 +834,17 @@ class ResultsViewerDock(QDockWidget):
             self.figure.clear()
             ax = self.figure.add_subplot(111)
             
-            reach_labels = [f"R{i+1}" for i in range(data.shape[1])]
+            reach_labels = [f"R{self.reach_ids[i]}" if i < len(self.reach_ids) else f"R{i+1}" for i in range(data.shape[1])]
             values = data[time_step, :]
 
             # If selection exists, show only selected reaches
             if self.selected_reaches:
                 sel_indices = []
                 for rid in self.selected_reaches:
-                    try:
-                        idx = int(rid) - 1
+                    if rid in self.reach_id_map:
+                        idx = self.reach_id_map[rid]
                         if 0 <= idx < len(values):
                             sel_indices.append(idx)
-                    except Exception:
-                        continue
                 reach_labels = [reach_labels[i] for i in sel_indices]
                 values = values[sel_indices]
 
@@ -942,12 +1028,19 @@ class ResultsViewerDock(QDockWidget):
                 if str(from_n) in self.selected_reaches:
                     to_n = feature.attribute(to_n_idx)
                     length = feature.attribute(len_idx) if len_idx >= 0 else 1000.0 # Default or calc geometry
-                    reaches_info[str(from_n)] = {
-                        'from': str(from_n),
-                        'to': str(to_n),
-                        'length': float(length),
-                        'reach_idx': int(from_n) - 1 # Assumption
-                    }
+                    
+                    # Resolve reach index using map
+                    reach_idx = -1
+                    if str(from_n) in self.reach_id_map:
+                        reach_idx = self.reach_id_map[str(from_n)]
+                    
+                    if reach_idx >= 0:
+                        reaches_info[str(from_n)] = {
+                            'from': str(from_n),
+                            'to': str(to_n),
+                            'length': float(length),
+                            'reach_idx': reach_idx
+                        }
             
             if not reaches_info:
                 QgsMessageLog.logMessage("Long Profile: No matching features found in layer.", "D-CASCADE", Qgis.Warning)
