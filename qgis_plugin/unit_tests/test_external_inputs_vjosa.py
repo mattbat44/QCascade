@@ -17,7 +17,7 @@ from reach_data import ReachData
 from external_inputs_builder import build_external_inputs_from_dir
 
 # Root and input paths
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 path_river_network = ROOT_DIR / Path('inputs/input_trial/')
 filename_river_network = path_river_network / 'River_Network.shp'
 path_q = ROOT_DIR / Path('inputs/input_trial/')

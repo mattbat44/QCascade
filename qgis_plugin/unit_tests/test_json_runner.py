@@ -15,7 +15,7 @@ from run_dcascade_json import run_simulation
 
 # Define paths relative to this test file
 TEST_DIR = Path(__file__).parent
-ROOT_DIR = TEST_DIR.parent
+ROOT_DIR = TEST_DIR.parent.parent
 INPUTS_DIR = ROOT_DIR / 'inputs' / 'input_trial'
 
 def test_Vjosa_Engelund_json():

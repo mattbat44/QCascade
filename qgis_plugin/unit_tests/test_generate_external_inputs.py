@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../json
 from run_dcascade_json import run_simulation
 
 TEST_DIR = Path(__file__).parent
-ROOT_DIR = TEST_DIR.parent
+ROOT_DIR = TEST_DIR.parent.parent
 INPUTS_DIR = ROOT_DIR / 'inputs' / 'input_trial'
 
 
