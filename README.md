@@ -100,6 +100,8 @@ In the folder "post_process_examples", there is a list of python script, that ar
 
 - a script to analyse connectivity and sediment path-length per time step (08)
 
+- a script to visualize sediment deposit layers (cores) at specific reaches, showing stratigraphy with grain size distribution and provenance tracking (09)
+
 You can run them and check the type of plot they generate for the example case. 
 
 
