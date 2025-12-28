@@ -313,7 +313,8 @@ class DSCASCADE_MAIN:
             direct_connectivity[t,:,:] = np.sum(SedimSys.direct_connectivity[t], axis = 2)
             # Deposited is the connectivity volumes summed by provenance (axe 0) and classes (axe 2) (excluding outlet)
             deposited[t,:] = np.sum(SedimSys.direct_connectivity[t][:, :-1, :], axis = (0,2))
-            overbank_dep[t,:] = np.sum(SedimSys.overbank_dep[t], axis=0)
+            # Sum over classes to get per-reach overbank deposits
+            overbank_dep[t,:] = np.sum(SedimSys.overbank_dep[t], axis=1)
 
         # Compute D50 mobilised (over sediment classes and provenance):
         D50_mob = SedimSys.create_2d_zero_array()

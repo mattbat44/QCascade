@@ -7,7 +7,7 @@ from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QFormLayout, QLineEdit, QPushButton, 
     QComboBox, QSpinBox, QDoubleSpinBox, QFileDialog, QCheckBox, 
     QHBoxLayout, QLabel, QTabWidget, QListWidget, QVBoxLayout, QMessageBox,
-    QSpacerItem, QSizePolicy
+    QSpacerItem, QSizePolicy, QMenu, QToolButton
 )
 from qgis.PyQt.QtCore import pyqtSignal, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
@@ -84,12 +84,36 @@ class ParametersDock(QDockWidget):
         csv_layout = QHBoxLayout()
         self.csv_path = QLineEdit()
         self.csv_path.setToolTip("CSV file with water discharge per reach per time step.\nFormat: rows = time steps, columns = reaches.")
-        self.csv_btn = QPushButton("Browse...")
+        self.csv_btn = QToolButton()
+        self.csv_btn.setText("Browse...")
         self.csv_btn.clicked.connect(self.browse_csv)
+        self.csv_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        csv_menu = QMenu(self.csv_btn)
+        csv_menu.addAction("Browse...").triggered.connect(self.browse_csv)
+        csv_menu.addAction("Create template").triggered.connect(self.create_discharge_template)
+        self.csv_btn.setMenu(csv_menu)
         csv_layout.addWidget(self.csv_path)
         csv_layout.addWidget(self.csv_btn)
         layout.addRow("Discharge (.csv):", csv_layout)
         self.csv_path.textChanged.connect(lambda: self.discharge_path_changed.emit(self.csv_path.text()))
+
+        # Optional overbank discharge thresholds
+        overbank_layout = QHBoxLayout()
+        self.overbank_csv_path = QLineEdit()
+        self.overbank_csv_path.setToolTip(
+            "CSV with one row per reach and columns: reach_id, Q_limit, W_overbank (width optional)."
+        )
+        self.overbank_csv_btn = QToolButton()
+        self.overbank_csv_btn.setText("Browse...")
+        self.overbank_csv_btn.clicked.connect(self.browse_overbank_csv)
+        self.overbank_csv_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        overbank_menu = QMenu(self.overbank_csv_btn)
+        overbank_menu.addAction("Browse...").triggered.connect(self.browse_overbank_csv)
+        overbank_menu.addAction("Create template").triggered.connect(self.create_overbank_template)
+        self.overbank_csv_btn.setMenu(overbank_menu)
+        overbank_layout.addWidget(self.overbank_csv_path)
+        overbank_layout.addWidget(self.overbank_csv_btn)
+        layout.addRow("Overbank Q limit (.csv):", overbank_layout)
         
         # Output Name
         self.output_name = QLineEdit("simulation_output")
@@ -373,6 +397,100 @@ class ParametersDock(QDockWidget):
         )
         if path:
             self.csv_path.setText(path)
+
+    def browse_overbank_csv(self):
+        """Browse for overbank discharge threshold CSV file."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Overbank Q CSV", "", "CSV Files (*.csv);;All Files (*)"
+        )
+        if path:
+            self.overbank_csv_path.setText(path)
+
+    def _get_reach_ids(self):
+        """Return sorted list of reach IDs from current layer (FromN field)."""
+        layer = self.layer_combo.currentLayer()
+        if layer is None:
+            raise ValueError("Select a river network layer first.")
+        from_idx = layer.fields().indexFromName("FromN")
+        if from_idx < 0:
+            raise ValueError("Layer is missing FromN field.")
+        ids = [feat.attribute(from_idx) for feat in layer.getFeatures()]
+        ids = [int(x) for x in ids if x is not None]
+        if not ids:
+            raise ValueError("No reaches found in layer.")
+        return sorted(set(ids))
+
+    def _get_timescale(self):
+        try:
+            return max(1, int(self.timescale.value()))
+        except Exception:
+            return 1
+
+    def create_discharge_template(self):
+        """Generate a zero-filled discharge CSV with rows=time, cols=reach order."""
+        try:
+            reach_ids = self._get_reach_ids()
+            times = self._get_timescale()
+        except Exception as e:
+            QMessageBox.warning(self, "Cannot create template", str(e))
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Discharge Template",
+            "discharge_template.csv",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(reach_ids)
+                row_zero = [0] * len(reach_ids)
+                for _ in range(times):
+                    writer.writerow(row_zero)
+        except Exception as e:
+            QMessageBox.critical(self, "Write Failed", f"Could not create template: {e}")
+            return
+
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception:
+            pass
+
+    def create_overbank_template(self):
+        """Generate a CSV with one row per reach and columns reach_id,Q_limit,W_overbank."""
+        try:
+            reach_ids = self._get_reach_ids()
+        except Exception as e:
+            QMessageBox.warning(self, "Cannot create template", str(e))
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Overbank Q Template",
+            "overbank_q_template.csv",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["reach_id", "Q_limit", "W_overbank"])
+                for rid in reach_ids:
+                    writer.writerow([rid, 0, 0])
+        except Exception as e:
+            QMessageBox.critical(self, "Write Failed", f"Could not create template: {e}")
+            return
+
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception:
+            pass
     
     def browse_output_dir(self):
         """Browse for output directory."""

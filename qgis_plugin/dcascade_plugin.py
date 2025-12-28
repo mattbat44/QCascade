@@ -519,7 +519,8 @@ class DCascadePlugin:
             river_network_shp=layer_path,
             discharge_csv=self.parameters_dock.csv_path.text(),
             output_name=self.parameters_dock.output_name.text(),
-            output_dir=self.parameters_dock.output_dir.text() or None
+            output_dir=self.parameters_dock.output_dir.text() or None,
+            overbank_q_csv=getattr(self.parameters_dock, "overbank_csv_path", None) and self.parameters_dock.overbank_csv_path.text() or None,
         )
         
         # Sediment
@@ -681,6 +682,8 @@ class DCascadePlugin:
         pdock.csv_path.setText(cfg.paths.discharge_csv or "")
         pdock.output_name.setText(cfg.paths.output_name or "")
         pdock.output_dir.setText(cfg.paths.output_dir or "")
+        if hasattr(pdock, "overbank_csv_path"):
+            pdock.overbank_csv_path.setText(getattr(cfg.paths, "overbank_q_csv", "") or "")
 
         # Sediment
         if hasattr(pdock, "min_phi"):

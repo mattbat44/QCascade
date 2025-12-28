@@ -6,6 +6,7 @@ class PathsConfig(BaseModel):
     discharge_csv: str
     output_name: str
     output_dir: Optional[str] = None
+    overbank_q_csv: Optional[str] = None
 
 class SedimentConfig(BaseModel):
     range: List[float] = Field(..., min_items=2, max_items=2)

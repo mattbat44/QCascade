@@ -266,6 +266,16 @@ class ResultsViewerDock(QDockWidget):
         play_layout.addStretch()
         layout.addLayout(play_layout)
 
+        #Animation frame duration
+        duration_control_layout = QHBoxLayout()
+        duration_control_layout.addWidget(QLabel("Frame Duration (ms):"))
+        self.frame_duration_spin = QSpinBox()
+        self.frame_duration_spin.setRange(50, 5000)
+        self.frame_duration_spin.setValue(200)
+        duration_control_layout.addWidget(self.frame_duration_spin)
+        layout.addLayout(duration_control_layout)
+        self.frame_duration_spin.valueChanged.connect(self._on_animation_setting_changed)
+
         layout.addStretch()
         return tab
     
@@ -569,7 +579,7 @@ class ResultsViewerDock(QDockWidget):
             self.animation_timer.stop()
             self.play_btn.setText("▶ Play")
         else:
-            self.animation_timer.start(200)  # 200ms per frame
+            self.animation_timer.start(self.frame_duration_spin.value())  # Use value from spin box
             self.play_btn.setText("⏸ Pause")
             if self.canvas_dock:
                 self.canvas_dock.show()
@@ -580,6 +590,7 @@ class ResultsViewerDock(QDockWidget):
             self.animation_timer.stop()
         if hasattr(self, "play_btn"):
             self.play_btn.setText("▶ Play")
+    
 
     def _show_canvas_menu(self, pos):
         """Provide right-click menu with save option via toolbar."""

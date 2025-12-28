@@ -847,7 +847,7 @@ class SedimentarySystem:
 
 
     def compute_mobilised_volumes(self, Vdep, tr_cap_per_s, n, t, roundpar,
-                                 passing_cascades = None, tr_cap_overbank = None):
+                                 passing_cascades = None, tr_cap_overbank = None, **kwargs):
 
         """
         Compute the mobilised volumes in reach n at time step t.
@@ -910,10 +910,10 @@ class SedimentarySystem:
 
         # Sediment classes with positive values in diff_with_capacity are mobilised from the reach n
         diff_pos = np.where(diff_with_capacity < 0, 0, diff_with_capacity)
+        overbank_dep = None
         if np.any(diff_pos):
             # Search for layers to be put in the erosion max (e_max_vol_)
             V_inc_el, V_dep_el, V_dep_not_el, _ = self.layer_search(Vdep, e_max_vol_, roundpar = roundpar)
-            overbank_dep = None
             if tr_cap_overbank is not None:
                 V_dep_el, V_dep_not_el, overbank_dep = self.tr_cap_deposit_overbank(V_dep_el, V_dep_not_el, tr_cap_overbank, roundpar)
 

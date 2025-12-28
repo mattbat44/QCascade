@@ -38,6 +38,9 @@ def run_simulation(config_path):
     paths = config['paths']
     river_network_path = (base_dir / paths['river_network_shp']).resolve()
     discharge_path = (base_dir / paths['discharge_csv']).resolve()
+    overbank_q_path = None
+    if isinstance(paths, dict):
+        overbank_q_path = paths.get('overbank_q_csv')
     output_name = paths['output_name']
 
     # Load parameters
@@ -83,10 +86,49 @@ def run_simulation(config_path):
         # In example: Q_new[:,i] = Q.iloc[:,idx]
         # If Q is DataFrame:
         if isinstance(Q, pd.DataFrame):
-             Q_new[:,i] = Q.iloc[:,idx]
+              Q_new[:, i] = Q.iloc[:, idx]
         else:
-             Q_new[:,i] = Q[:,idx]
+              Q_new[:, i] = Q[:, idx]
     Q = Q_new
+
+    # Optional overbank discharge thresholds/widths (one row per reach: reach_id,Q_limit,W_overbank)
+    overbank_Q = None
+    overbank_width = None
+    if overbank_q_path:
+        overbank_q_path = (base_dir / overbank_q_path).resolve()
+        df_overbank = pd.read_csv(overbank_q_path)
+        cols_lower = {c.lower(): c for c in df_overbank.columns}
+        if "reach_id" not in cols_lower or "q_limit" not in cols_lower:
+            raise ValueError("Overbank Q CSV must have columns reach_id and Q_limit (W_overbank optional).")
+        reach_col = cols_lower["reach_id"]
+        q_col = cols_lower["q_limit"]
+        w_col = cols_lower.get("w_overbank")
+
+        # Map reach_id -> values
+        reach_to_q = {}
+        reach_to_w = {}
+        for _, row in df_overbank.iterrows():
+            try:
+                rid = int(row[reach_col])
+            except Exception:
+                continue
+            reach_to_q[rid] = float(row[q_col])
+            if w_col is not None and not pd.isna(row[w_col]):
+                reach_to_w[rid] = float(row[w_col])
+
+        overbank_Q_new = np.zeros((time['timescale'], reach_data.n_reaches))
+        overbank_W_new = np.full((time['timescale'], reach_data.n_reaches), np.nan)
+        for i, idx in enumerate(sorted_indices):
+            rid = int(reach_data.from_n[idx])
+            if rid not in reach_to_q:
+                raise ValueError(f"Overbank Q CSV missing reach_id {rid}.")
+            overbank_Q_new[:, i] = reach_to_q[rid]
+            if rid in reach_to_w:
+                overbank_W_new[:, i] = reach_to_w[rid]
+
+        overbank_Q = overbank_Q_new
+        if not np.all(np.isnan(overbank_W_new)):
+            overbank_width = overbank_W_new
 
     print("Preprocessing graph...")
     network = graph_preprocessing(reach_data)
@@ -206,7 +248,8 @@ def run_simulation(config_path):
         update_slope=phys.get('update_slope', False),
         roundpar=roundpar,
         external_inputs=external_inputs_tensor, 
-        force_pass_external_inputs=opts.get('force_pass_external_inputs', False)
+        force_pass_external_inputs=opts.get('force_pass_external_inputs', False),
+        overbank_Q=overbank_Q,
     )
     print("Simulation completed.")
 
