@@ -38,7 +38,7 @@ from reach_data import ReachData
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-#---------------------Path to the extended pickle output
+#---------------------Path to the extended JSON output
 path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
 name_simu_ext = 'Vjosa_test_ext'

@@ -335,12 +335,12 @@ class ResultsViewerDock(QDockWidget):
         self.update_dynamic_plot()
     
     def load_results(self):
-        """Load results from pickle file."""
+        """Load results from JSON file."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Results File",
             "",
-            "Pickle Files (*.p);;All Files (*)"
+            "JSON Files (*.json);;All Files (*)"
         )
         
         if not file_path:
