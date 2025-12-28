@@ -25,10 +25,11 @@ import geopandas as gpd
 # Add source (src) folder in the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from plot_function import dynamic_plot
+from json_serializer import load_from_json
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-#---------------------Path to the pickle output
+#---------------------Path to the JSON output
 
 path = os.path.join(SCRIPT_DIR, "..\\cascade_results\\") 
 name_simu = 'Vjosa_test'
@@ -43,7 +44,7 @@ name_river_network = "River_Network.shp"
 
 ###########################################################################
 
-data_output = pd.read_pickle(open( path + name_simu + '.p' , "rb"))
+data_output = load_from_json(path + name_simu + '.json')
 ReachData = gpd.GeoDataFrame.from_file(path_river_network + name_river_network)
 
 keep_slider = dynamic_plot(data_output, ReachData)

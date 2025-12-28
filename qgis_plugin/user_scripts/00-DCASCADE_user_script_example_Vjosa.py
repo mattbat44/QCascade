@@ -249,18 +249,18 @@ data_output, extended_output = DCASCADE_main(reach_data, network, Q, psi, timesc
 
 
 ################ SAVE OUTPUTS ###############
-import pickle
+from json_serializer import save_to_json
 
 path_results = script_dir / "../cascade_results/"
 if not os.path.exists(path_results):
     os.makedirs(path_results)
 
-name_file = path_results / Path(str(name_output) + '.p')
-pickle.dump(data_output, open(name_file , "wb"))  # save it into a file named save.p
+name_file = path_results / Path(str(name_output) + '.json')
+save_to_json(data_output, name_file)
 
 if save_extended:
-    name_file_ext = path_results / Path(str(name_output) + '_ext.p')
-    pickle.dump(extended_output , open(name_file_ext , "wb"))  # save it into a file named save.p
+    name_file_ext = path_results / Path(str(name_output) + '_ext.json')
+    save_to_json(extended_output, name_file_ext)
 
 
 # Plot dynamic results

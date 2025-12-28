@@ -85,8 +85,8 @@ To check if the installation went well, you can use the example, that is availab
 Open the user script example, available at "user_scripts\00-DCASCADE_user_script_example_Vjosa.py", in Spyder (you can drag it into Spyder). And run it.
 You should see a time bar progressing quickly in the Spyder console.
 
-Once done, the simulation should create a folder "cascade_results" in your project, and produce two outputs files (Vjosa_test.p and Vjosa_test_exp.p).
-These are pickle files containing all outputs of the model.
+Once done, the simulation should create a folder "cascade_results" in your project, and produce two outputs files (Vjosa_test.json and Vjosa_test_ext.json).
+These are JSON files containing all outputs of the model.
 
 ## First checking of outputs
 

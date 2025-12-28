@@ -234,8 +234,8 @@ class ParametersDock(QDockWidget):
             self.load_config_requested.emit(path)
 
     def on_load_run_clicked(self):
-        """Ask for model run pickle and emit load request."""
-        path, _ = QFileDialog.getOpenFileName(self, "Load from run file", "", "Run Results (*.p *.pkl *.pickle);;All Files (*.*)")
+        """Ask for model run file and emit load request."""
+        path, _ = QFileDialog.getOpenFileName(self, "Load from run file", "", "Run Results (*.json);;All Files (*.*)")
         if path:
             self.load_run_requested.emit(path)
     
