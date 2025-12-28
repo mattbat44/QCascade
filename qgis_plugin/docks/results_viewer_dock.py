@@ -14,10 +14,16 @@ from qgis.core import Qgis, QgsMessageLog
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 from matplotlib.figure import Figure
+import sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import pickle
+
+# Add src folder to path for imports
+src_path = Path(__file__).parent.parent / 'src'
+sys.path.insert(0, str(src_path))
+
+from json_serializer import load_from_json
 
 
 class ResultsViewerDock(QDockWidget):
@@ -329,20 +335,19 @@ class ResultsViewerDock(QDockWidget):
         self.update_dynamic_plot()
     
     def load_results(self):
-        """Load results from pickle file."""
+        """Load results from JSON file."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Results File",
             "",
-            "Pickle Files (*.p);;All Files (*)"
+            "JSON Files (*.json);;All Files (*)"
         )
         
         if not file_path:
             return
         
         try:
-            with open(file_path, 'rb') as f:
-                self.results_data = pickle.load(f)
+            self.results_data = load_from_json(file_path)
             
             self.results_path = file_path
             
@@ -366,8 +371,7 @@ class ResultsViewerDock(QDockWidget):
         if Path(path).exists():
             self.results_path = path
             try:
-                with open(path, 'rb') as f:
-                    self.results_data = pickle.load(f)
+                self.results_data = load_from_json(path)
                 self.update_ui_with_results()
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Could not load results: {str(e)}")

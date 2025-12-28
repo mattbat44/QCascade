@@ -8,10 +8,16 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog, QMenu, QToolB
 from qgis.core import QgsProject, QgsVectorLayer, QgsMessageLog, Qgis, QgsGraduatedSymbolRenderer, QgsSymbol, QgsStyle, QgsStyle
 from qgis.gui import QgsMapToolIdentifyFeature
 import os
+import sys
 import json
-import pickle
 from pathlib import Path
 import numpy as np
+
+# Add src folder to path for imports
+src_path = Path(__file__).parent / 'src'
+sys.path.insert(0, str(src_path))
+
+from json_serializer import load_from_json
 
 from .docks.parameters_dock import ParametersDock
 from .docks.results_viewer_dock import ResultsViewerDock
@@ -644,8 +650,7 @@ class DCascadePlugin:
     def on_load_run_requested(self, path):
         """Attempt to extract config from a run results file and load it."""
         try:
-            with open(path, "rb") as f:
-                data = pickle.load(f)
+            data = load_from_json(path)
 
             config_dict = None
             if isinstance(data, dict):
