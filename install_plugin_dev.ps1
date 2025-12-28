@@ -87,7 +87,7 @@ if (-not (Test-Path $profileDir)) {
     Write-Host "You can create this profile in QGIS:" -ForegroundColor Cyan
     Write-Host "1. Open QGIS" -ForegroundColor Cyan
     Write-Host "2. Settings → User Profiles → New Profile" -ForegroundColor Cyan
-    Write-Host "3. Name it 'dcascade-testing'" -ForegroundColor Cyan
+    Write-Host "3. Name it dcascade-testing" -ForegroundColor Cyan
     Write-Host ""
     $response = Read-Host "Continue anyway? (y/n)"
     if ($response -ne 'y' -and $response -ne 'Y') {
@@ -109,12 +109,13 @@ try {
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
     Write-Host "1. Open QGIS with profile '$profileName'" -ForegroundColor White
-    Write-Host "2. Go to Plugins → Manage and Install Plugins" -ForegroundColor White
-    Write-Host "3. Enable 'D-CASCADE' plugin" -ForegroundColor White
-    Write-Host "4. For rapid development, install 'Plugin Reloader' plugin" -ForegroundColor White
+    Write-Host "2. Go to Plugins Manage and Install Plugins" -ForegroundColor White
+    Write-Host "3. Enable D-CASCADE plugin" -ForegroundColor White
+    Write-Host "4. For rapid development, install Plugin Reloader plugin" -ForegroundColor White
     Write-Host "   (allows reloading plugin without restarting QGIS)" -ForegroundColor White
-    Write-Host ""
-} catch {
+    Write-Host ""}
+
+    catch {
     Write-Host ""
     Write-Host "ERROR: Failed to create junction: $_" -ForegroundColor Red
     Write-Host ""
