@@ -9,10 +9,12 @@ from qgis.PyQt.QtWidgets import (
     QHBoxLayout, QLabel, QTabWidget, QListWidget, QVBoxLayout, QMessageBox,
     QSpacerItem, QSizePolicy
 )
-from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal, QUrl
+from qgis.PyQt.QtGui import QDesktopServices
 from qgis.gui import QgsMapLayerComboBox
 from qgis.core import QgsMapLayerProxyModel
 import os
+import csv
 
 
 class ParametersDock(QDockWidget):
@@ -320,6 +322,12 @@ class ParametersDock(QDockWidget):
         self.add_ext_input_btn.setEnabled(False)
         self.add_ext_input_btn.clicked.connect(self.add_external_input)
         layout.addWidget(self.add_ext_input_btn)
+
+        # Create template button
+        self.create_ext_input_btn = QPushButton("Create External Input CSV")
+        self.create_ext_input_btn.setEnabled(False)
+        self.create_ext_input_btn.clicked.connect(self.create_external_input_template)
+        layout.addWidget(self.create_ext_input_btn)
         
         # List of external inputs for selected reach
         self.ext_inputs_list = QListWidget()
@@ -378,10 +386,12 @@ class ParametersDock(QDockWidget):
         if reach_idx is not None:
             self.selected_reach_label.setText(f"Reach {reach_idx}")
             self.add_ext_input_btn.setEnabled(True)
+            self.create_ext_input_btn.setEnabled(True)
             self.update_external_inputs_list()
         else:
             self.selected_reach_label.setText("None")
             self.add_ext_input_btn.setEnabled(False)
+            self.create_ext_input_btn.setEnabled(False)
             self.ext_inputs_list.clear()
     
     def update_external_inputs_list(self):
@@ -408,10 +418,57 @@ class ParametersDock(QDockWidget):
             self.external_inputs_mapping[self.selected_reach_idx] = []
         
         self.external_inputs_mapping[self.selected_reach_idx].append(path)
-        self.external_inputs_list.addItem(os.path.basename(path))
+        self.ext_inputs_list.addItem(os.path.basename(path))
         self.remove_ext_input_btn.setEnabled(True)
         
         self.external_input_added.emit(self.selected_reach_idx, path)
+
+    def create_external_input_template(self):
+        """Create a CSV template for the selected reach and open it for editing."""
+        if self.selected_reach_idx is None:
+            QMessageBox.information(self, "Select Reach", "Please select a reach in the map first.")
+            return
+
+        default_name = f"reach_{self.selected_reach_idx}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create External Input CSV",
+            default_name,
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if not path:
+            return
+
+        try:
+            timescale = self.timescale.value() if hasattr(self, "timescale") else 1
+            timescale = max(int(timescale), 1)
+        except Exception:
+            timescale = 1
+
+        header = ["time_idx", "D50", "volume_m3"]
+        rows = [[t, 2.0, 0] for t in range(timescale)]
+
+        try:
+            with open(path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerows(rows)
+        except Exception as e:
+            QMessageBox.critical(self, "Write Failed", f"Could not create template: {e}")
+            return
+
+        # Track in UI/mapping
+        if self.selected_reach_idx not in self.external_inputs_mapping:
+            self.external_inputs_mapping[self.selected_reach_idx] = []
+        self.external_inputs_mapping[self.selected_reach_idx].append(path)
+        self.ext_inputs_list.addItem(os.path.basename(path))
+        self.remove_ext_input_btn.setEnabled(True)
+
+        # Open the file for user editing
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception:
+            pass
     
     def remove_external_input(self):
         """Remove the selected external input from the list."""

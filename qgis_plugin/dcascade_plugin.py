@@ -11,6 +11,7 @@ import os
 import json
 import pickle
 from pathlib import Path
+import numpy as np
 
 from .docks.parameters_dock import ParametersDock
 from .docks.results_viewer_dock import ResultsViewerDock
@@ -36,6 +37,7 @@ class DCascadePlugin:
         self.toolbar_widget_action = None
         self.parameters_action = None
         self.results_action = None
+        self.animation_layer = None
         
         # Layer and selection tracking
         self.network_layer = None
@@ -80,6 +82,8 @@ class DCascadePlugin:
         
         self.results_viewer_dock.time_step_changed.connect(self.on_time_step_changed)
         self.results_viewer_dock.reach_selected_for_graph.connect(self.graph_reach)
+        self.results_viewer_dock.results_loaded.connect(self.on_results_loaded)
+        self.results_viewer_dock.animation_settings_changed.connect(lambda: self.on_time_step_changed(self.current_time_step))
         
         # Connect map canvas selection
         self.canvas.selectionChanged.connect(self.on_map_selection_changed)
@@ -110,6 +114,14 @@ class DCascadePlugin:
         self.iface.addPluginToMenu("&D-CASCADE", self.parameters_action)
         self.iface.addPluginToMenu("&D-CASCADE", self.results_action)
         
+        # Force initial layer selection from parameters dock
+        if self.parameters_dock and self.parameters_dock.layer_combo:
+            current_layer = self.parameters_dock.layer_combo.currentLayer()
+            if current_layer:
+                self.on_layer_selected(current_layer)
+                # Also check for existing selection
+                self.on_map_selection_changed()
+        
         QgsMessageLog.logMessage("D-CASCADE plugin initialized", "D-CASCADE", Qgis.Info)
         self.initialized = True
     
@@ -128,7 +140,16 @@ class DCascadePlugin:
         if self.parameters_dock:
             self.parameters_dock.close()
         if self.results_viewer_dock:
+            try:
+                self.results_viewer_dock.stop_animation()
+            except Exception:
+                pass
             self.results_viewer_dock.close()
+        # Remove temporary animation layer if present
+        if self.animation_layer:
+            from qgis.core import QgsProject
+            QgsProject.instance().removeMapLayer(self.animation_layer.id())
+            self.animation_layer = None
         
         # Disconnect signals
         if self.canvas:
@@ -159,6 +180,8 @@ class DCascadePlugin:
         if self.results_viewer_dock:
             self.results_viewer_dock.setVisible(True)
             self.results_viewer_dock.raise_()
+            # Ensure plot dock is shown alongside controls
+            self.results_viewer_dock.show_plot_dock()
 
     def remove_toolbar_items(self):
         """Remove any toolbar items we may have added (dropdown or legacy)."""
@@ -230,18 +253,24 @@ class DCascadePlugin:
         if not selected_features:
             self.selected_reach_id = None
             self.parameters_dock.set_selected_reach(None)
+            if self.results_viewer_dock:
+                self.results_viewer_dock.graph_selected_reach(None)
             return
-        
-        # Get the first selected feature's FromN
-        feature = selected_features[0]
+
         from_n_idx = self.network_layer.fields().indexFromName('FromN')
-        if from_n_idx >= 0:
-            self.selected_reach_id = feature.attribute(from_n_idx)
-            self.parameters_dock.set_selected_reach(self.selected_reach_id)
-            
-            # Graph selected reach in results viewer
-            if self.results_viewer_dock and self.results_viewer_dock.results_data is not None:
-                self.results_viewer_dock.graph_selected_reach(self.selected_reach_id)
+        if from_n_idx < 0:
+            return
+
+        reach_ids = []
+        for feature in selected_features:
+            reach_ids.append(feature.attribute(from_n_idx))
+
+        # Track first for params dock; pass all to results viewer
+        self.selected_reach_id = reach_ids[0] if reach_ids else None
+        self.parameters_dock.set_selected_reach(self.selected_reach_id)
+
+        if self.results_viewer_dock and self.results_viewer_dock.results_data is not None:
+            self.results_viewer_dock.graph_selected_reach(reach_ids)
     
     def on_external_input_added(self, reach_idx, csv_path):
         """Handle external input CSV added to reach."""
@@ -251,6 +280,11 @@ class DCascadePlugin:
             Qgis.Info
         )
     
+    def on_results_loaded(self):
+        """Handle results loaded signal."""
+        # Initialize animation layer at time step 0
+        self.on_time_step_changed(0)
+
     def on_time_step_changed(self, time_step):
         """Handle time step change in results viewer - update layer symbology."""
         self.current_time_step = time_step
@@ -263,82 +297,162 @@ class DCascadePlugin:
     
     def update_layer_symbology(self, time_step):
         """Update network layer symbology based on results for given time step."""
-        if self.network_layer is None or self.results_viewer_dock.results_data is None:
+        if self.network_layer is None:
+            QgsMessageLog.logMessage("Cannot update symbology: No network layer selected", "D-CASCADE", Qgis.Warning)
+            return
+            
+        if self.results_viewer_dock.results_data is None:
             return
         
         # Get the current variable from results viewer
         variable = self.results_viewer_dock.dyn_variable_combo.currentText()
         if variable not in self.results_viewer_dock.results_data:
+            QgsMessageLog.logMessage(f"Cannot update symbology: Variable '{variable}' not found in results", "D-CASCADE", Qgis.Warning)
             return
         
         data = self.results_viewer_dock.results_data[variable]
         if time_step >= data.shape[0]:
             return
         
-        # Get field name for this variable (create if doesn't exist)
-        field_name = f"result_{variable.replace(' ', '_').replace('[', '').replace(']', '')}"
-        self.animation_field = field_name
-        
-        # Add field if it doesn't exist
-        from qgis.core import QgsField
+        from qgis.core import (
+            QgsVectorLayer,
+            QgsField,
+            QgsFeature,
+            QgsProject,
+            QgsWkbTypes,
+            QgsGraduatedSymbolRenderer,
+            QgsSymbol,
+            QgsStyle,
+            QgsRendererRange,
+        )
         from qgis.PyQt.QtCore import QVariant
-        
-        fields = self.network_layer.fields()
-        field_idx = fields.indexFromName(field_name)
-        
-        if field_idx < 0:
-            new_field = QgsField(field_name, QVariant.Double)
-            self.network_layer.dataProvider().addAttributes([new_field])
-            self.network_layer.updateFields()
-            field_idx = self.network_layer.fields().indexFromName(field_name)
-        
-        # Update attribute values for current time step
-        self.network_layer.startEditing()
-        
-        # Get FromN field index
+
+        geom_type = QgsWkbTypes.displayString(self.network_layer.wkbType())
+        crs_authid = self.network_layer.crs().authid()
+
+        # Create or reuse in-memory animation layer
+        if self.animation_layer is None:
+            uri = f"{geom_type}?crs={crs_authid}"
+            self.animation_layer = QgsVectorLayer(uri, "D-CASCADE Animation", "memory")
+            prov = self.animation_layer.dataProvider()
+            prov.addAttributes([
+                QgsField("FromN", QVariant.String),
+                QgsField("ToN", QVariant.String),
+                QgsField("value", QVariant.Double),
+            ])
+            self.animation_layer.updateFields()
+            QgsProject.instance().addMapLayer(self.animation_layer)
+            # Move animation layer above network layer for visibility
+            root = QgsProject.instance().layerTreeRoot()
+            net_node = root.findLayer(self.network_layer.id())
+            anim_node = root.findLayer(self.animation_layer.id())
+            if net_node and anim_node:
+                parent = net_node.parent() or root
+                anim_parent = anim_node.parent() or root
+                try:
+                    # QgsLayerTreeGroup does not have indexOfChild, use children().index()
+                    idx = parent.children().index(net_node)
+                    parent.insertChildNode(idx, anim_node.clone())
+                    anim_parent.removeChildNode(anim_node)
+                except ValueError:
+                    pass
+        else:
+            prov = self.animation_layer.dataProvider()
+            prov.truncate()
+
+        # Build features with current timestep values
         from_n_idx = self.network_layer.fields().indexFromName('FromN')
+        to_n_idx = self.network_layer.fields().indexFromName('ToN')
         if from_n_idx < 0:
             return
-        
+
+        features = []
         for feature in self.network_layer.getFeatures():
             from_n = feature.attribute(from_n_idx)
-            if from_n is not None:
-                try:
-                    # Convert FromN to integer index (assuming FromN starts at some value)
-                    # This might need adjustment based on your data
-                    reach_idx = int(from_n) - 1  # Adjust based on your indexing
-                    if 0 <= reach_idx < data.shape[1]:
-                        value = float(data[time_step, reach_idx])
-                        self.network_layer.changeAttributeValue(
-                            feature.id(),
-                            field_idx,
-                            value
-                        )
-                except (ValueError, IndexError):
-                    pass
-        
-        self.network_layer.commitChanges()
-        
-        # Update symbology with graduated renderer
-        if field_idx >= 0:
-            symbol = QgsSymbol.defaultSymbol(self.network_layer.geometryType())
-            
-            # Create graduated renderer using factory method
+            to_n = feature.attribute(to_n_idx) if to_n_idx >= 0 else None
+            try:
+                reach_idx = int(from_n) - 1
+            except Exception:
+                continue
+            if reach_idx < 0 or reach_idx >= data.shape[1]:
+                continue
+
+            value = float(data[time_step, reach_idx])
+            f = QgsFeature(self.animation_layer.fields())
+            f.setGeometry(feature.geometry())
+            f.setAttribute("FromN", str(from_n) if from_n is not None else "")
+            f.setAttribute("ToN", str(to_n) if to_n is not None else "")
+            f.setAttribute("value", value)
+            features.append(f)
+
+        if features:
+            prov.addFeatures(features)
+            self.animation_layer.updateExtents()
+
+        # Build or reuse renderer once per variable/ramp/width using global data range
+        if not hasattr(self, "_animation_renderer_variable"):
+            self._animation_renderer_variable = None
+            self._animation_renderer_ramp = None
+            self._animation_renderer_width = None
+
+        ramp_name = None
+        line_width = 1.2
+        try:
+            ramp_name = self.results_viewer_dock.dyn_color_combo.currentText()
+        except Exception:
+            ramp_name = "Spectral"
+        try:
+            line_width = float(self.results_viewer_dock.dyn_width_spin.value())
+        except Exception:
+            line_width = 1.2
+
+        needs_renderer = (
+            self._animation_renderer_variable != variable
+            or self._animation_renderer_ramp != ramp_name
+            or self._animation_renderer_width != line_width
+            or self.animation_layer.renderer() is None
+        )
+
+        if needs_renderer:
+            symbol = QgsSymbol.defaultSymbol(self.animation_layer.geometryType())
             style = QgsStyle.defaultStyle()
-            ramp = style.colorRamp('Spectral')
-            
-            renderer = QgsGraduatedSymbolRenderer.createRenderer(
-                self.network_layer,
-                field_name,
-                nclasses=5,
-                mode=QgsGraduatedSymbolRenderer.EqualInterval,
-                symbol=symbol,
-                ramp=ramp
+            ramp = style.colorRamp(ramp_name) or style.defaultColorRamp()
+            if ramp is None:
+                ramp = style.defaultColorRamp()
+
+            vmin, vmax = self.results_viewer_dock.data_ranges.get(
+                variable,
+                (np.nanmin(data), np.nanmax(data)),
             )
-            
-            self.network_layer.setRenderer(renderer)
-            self.network_layer.triggerRepaint()
-            self.canvas.refresh()
+            if vmax == vmin:
+                vmax = vmin + 1.0
+            classes = 5
+            step = (vmax - vmin) / classes
+            ranges = []
+            for i in range(classes):
+                lower = vmin + i * step
+                upper = vmin + (i + 1) * step if i < classes - 1 else vmax
+                sym = symbol.clone()
+                try:
+                    if hasattr(sym, "setWidth"):
+                        sym.setWidth(line_width)
+                    elif hasattr(sym, "setSize"):
+                        sym.setSize(line_width)
+                except Exception:
+                    pass
+                if ramp:
+                    t = i / max(classes - 1, 1)
+                    sym.setColor(ramp.color(t))
+                ranges.append(QgsRendererRange(lower, upper, sym, f"{lower:.3g}–{upper:.3g}"))
+
+            renderer = QgsGraduatedSymbolRenderer("value", ranges)
+            renderer.setMode(QgsGraduatedSymbolRenderer.EqualInterval)
+            self.animation_layer.setRenderer(renderer)
+            self._animation_renderer_variable = variable
+            self._animation_renderer_ramp = ramp_name
+            self._animation_renderer_width = line_width
+        self.animation_layer.triggerRepaint()
+        self.canvas.refresh()
     
     def graph_reach(self, reach_idx):
         """Graph a specific reach in results viewer."""
