@@ -72,6 +72,7 @@ class SedimentarySystem:
         self.Qbi_tr = None
         self.Qbi_mob = None
         self.Qbi_mob_from_r = None
+        self.overbank_dep = None
         self.V_sed = None
         self.Q_out = None
         self.update_slope = None
@@ -282,6 +283,7 @@ class SedimentarySystem:
         self.Q_out = self.create_3d_zero_array()  # amount of material delivered outside the network in each timestep
         self.V_sed = self.create_3d_zero_array()  # velocities
         self.sediment_budget = self.create_3d_zero_array()
+        self.overbank_dep = self.create_3d_zero_array()  # overbank-specific deposited volumes
 
         self.tr_cap = self.create_3d_zero_array()  # transport capacity per each sediment class
 
@@ -845,7 +847,7 @@ class SedimentarySystem:
 
 
     def compute_mobilised_volumes(self, Vdep, tr_cap_per_s, n, t, roundpar,
-                                 passing_cascades = None):
+                                 passing_cascades = None, tr_cap_overbank = None):
 
         """
         Compute the mobilised volumes in reach n at time step t.
@@ -911,6 +913,10 @@ class SedimentarySystem:
         if np.any(diff_pos):
             # Search for layers to be put in the erosion max (e_max_vol_)
             V_inc_el, V_dep_el, V_dep_not_el, _ = self.layer_search(Vdep, e_max_vol_, roundpar = roundpar)
+            overbank_dep = None
+            if tr_cap_overbank is not None:
+                V_dep_el, V_dep_not_el, overbank_dep = self.tr_cap_deposit_overbank(V_dep_el, V_dep_not_el, tr_cap_overbank, roundpar)
+
             [V_mob, Vdep_new] = self.tr_cap_deposit(V_inc_el, V_dep_el, V_dep_not_el, diff_pos, roundpar)
 
             if np.all(self.sediments(V_mob) == 0):
@@ -934,6 +940,9 @@ class SedimentarySystem:
         # If the new Vdep is empty, put an empty layer for next steps
         if Vdep_new.size == 0:
             Vdep_new = self.create_volume(provenance=n)
+
+        if overbank_dep is not None:
+            self.overbank_dep[t, n, :] += np.sum(self.sediments(overbank_dep), axis=0)
 
         return V_mob, passing_cascades, Vdep_new
 
@@ -1263,6 +1272,106 @@ class SedimentarySystem:
         return V_mob, V_dep
 
 
+    def tr_cap_deposit_overbank(self, V_dep2act, V_dep, tr_cap_overbank, roundpar):
+        """
+        @brief Deposit excess active-layer volume when overbank transport capacity is limiting.
+        @details
+            Python port of the original MATLAB function `tr_cap_deposit_overbank`. It trims the
+            active-layer volume (`V_dep2act`) so that, for each sediment class, the mobilised
+            volume does not exceed the overbank-corrected transport capacity
+            (`tr_cap_overbank`). Excess volume is re-deposited into `V_dep`, respecting
+            stratigraphy (lower layers are deposited first). This helper is intended to be called
+            before computing the mobilised volume in situations where overbank flow reduces the
+            effective transport capacity. Integration requires the caller to supply
+            `tr_cap_overbank` in the same units as the active-layer volumes.
+
+        @param V_dep2act
+            Active-layer portion extracted from the deposit layer (layers x n_classes + metadata).
+        @param V_dep
+            Current deposit layer.
+        @param tr_cap_overbank
+            Overbank-corrected transport capacity per class (1d array of length n_classes).
+        @param roundpar
+            Number of decimals to round sediment volumes to (use np.nan to skip rounding).
+
+        @return V_dep2act_new
+            Mobilisable portion of V_dep2act after enforcing overbank capacity.
+        @return V_dep_out
+            Updated deposit layer after re-depositing excess sediment.
+        @return V_overbank_dep
+            Volume re-deposited due to overbank limitation (same shape as V_dep2act).
+        """
+
+        class_sup_dep = tr_cap_overbank < np.sum(self.sediments(V_dep2act), axis=0)
+
+        if np.any(class_sup_dep):
+            V_to_be_eroded = tr_cap_overbank[class_sup_dep]
+            mask = np.append([False] * self.n_metadata, class_sup_dep)
+            V_dep2act_class = V_dep2act[:, mask]
+
+            csum = np.cumsum(V_dep2act_class[::-1], axis=0)[::-1]
+            over_capacity_map = csum > V_to_be_eroded
+            over_capacity_map[0, np.sum(over_capacity_map, axis=0) == 0] = True
+
+            # Replicates MATLAB logic: find the first layer where csum falls below capacity,
+            # then select the layer just above it (wrapping to the top layer when needed).
+            firstoverthresh = np.zeros(over_capacity_map.shape[1], dtype=int)
+            for col in range(over_capacity_map.shape[1]):
+                idx = np.argmin(over_capacity_map[:, col]) + 1  # 1-based index of first minimum
+                val = idx - 1
+                if val == 0:
+                    val = over_capacity_map.shape[0]
+                firstoverthresh[col] = val - 1  # convert back to 0-based indexing
+
+            mapfirst = np.zeros_like(over_capacity_map, dtype=float)
+            mapfirst[firstoverthresh, np.arange(over_capacity_map.shape[1])] = 1
+
+            numer = V_to_be_eroded - np.sum(V_dep2act_class * (~over_capacity_map), axis=0)
+            denom = V_dep2act_class[firstoverthresh, np.arange(over_capacity_map.shape[1])]
+            perc_dep = np.where(denom != 0, np.minimum(numer / denom, 1), 0)
+
+            map_perc = mapfirst * perc_dep + (~over_capacity_map)
+
+            V_dep2act_new = np.zeros_like(V_dep2act, dtype=float)
+            self.metadata(V_dep2act_new)[:] = self.metadata(V_dep2act)
+            V_dep2act_new[:, mask] = map_perc * V_dep2act_class
+
+            if not np.isnan(roundpar):
+                self.sediments(V_dep2act_new)[:] = np.around(self.sediments(V_dep2act_new), decimals=roundpar)
+
+            V_2dep = np.zeros_like(V_dep2act, dtype=float)
+            V_2dep[:, ~mask] = V_dep2act[:, ~mask]
+            V_2dep[:, mask] = (1 - map_perc) * V_dep2act_class
+
+            if not np.isnan(roundpar):
+                self.sediments(V_2dep)[:] = np.around(self.sediments(V_2dep), decimals=roundpar)
+
+            if np.sum(self.sediments(V_dep2act)) != 0:
+                keep_rows = np.sum(self.sediments(V_dep2act_new), axis=1) != 0
+                V_dep2act_new = V_dep2act_new[keep_rows]
+        else:
+            V_dep2act_new = V_dep2act
+            V_2dep = np.zeros((1, V_dep2act.shape[1]), dtype=float)
+            V_2dep[0, 0] = 1
+
+        V_dep_out = np.copy(V_dep)
+        if V_dep_out.size == 0:
+            V_dep_out = V_2dep
+        elif V_dep_out[-1, 0] == V_2dep[0, 0]:
+            V_dep_out[-1, self.n_metadata:] = V_dep_out[-1, self.n_metadata:] + np.sum(
+                self.sediments(V_2dep[:1]), axis=0
+            )
+            if V_2dep.shape[0] > 1:
+                V_dep_out = np.vstack((V_dep_out, V_2dep[1:, :]))
+        else:
+            V_dep_out = np.vstack((V_dep_out, V_2dep))
+
+        if np.sum(self.sediments(V_dep_out)) != 0:
+            V_dep_out = V_dep_out[np.sum(self.sediments(V_dep_out), axis=1) != 0]
+
+        return V_dep2act_new, V_dep_out, V_2dep
+
+
 
     def deposit_from_passing_sediments(self, V_remove, cascade_list, roundpar, n, t):
         '''
@@ -1456,4 +1565,3 @@ class SedimentarySystem:
             volume_sort = volume
 
         return volume_sort
-
