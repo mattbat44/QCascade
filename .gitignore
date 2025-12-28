@@ -15,3 +15,7 @@ src\dcascade_py_2_0_0.egg-info
 */temp_config.json
 temp_config.json
 test_config.json
+
+inputs/*
+inputs
+inputs/
