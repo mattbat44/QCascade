@@ -12,7 +12,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import pyqtSignal, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.gui import QgsMapLayerComboBox
-from qgis.core import QgsMapLayerProxyModel
+from qgis.core import QgsMapLayerProxyModel, QgsMessageLog, Qgis
 import os
 import csv
 
@@ -544,7 +544,7 @@ class ParametersDock(QDockWidget):
     def create_external_input_template(self):
         """Create a CSV template for the selected reach and open it for editing."""
         if self.selected_reach_idx is None:
-            QMessageBox.information(self, "Select Reach", "Please select a reach in the map first.")
+            QgsMessageLog.logMessage("Please select a reach in the map first.", "D-CASCADE", Qgis.Info)
             return
 
         default_name = f"reach_{self.selected_reach_idx}.csv"

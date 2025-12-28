@@ -10,6 +10,7 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox, QTabWidget, QSlider
 )
 from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.core import Qgis, QgsMessageLog
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 from matplotlib.figure import Figure
@@ -348,11 +349,13 @@ class ResultsViewerDock(QDockWidget):
             # Update UI
             self.update_ui_with_results()
             
-            QMessageBox.information(
+            QgsMessageLog.logMessage(
                 self,
                 "Success",
                 f"Loaded results from {Path(file_path).name}\n"
-                f"Available variables: {len(self.results_data)} fields"
+                f"Available variables: {len(self.results_data)} fields",
+                "D-CASCADE",
+                Qgis.Info
             )
             
         except Exception as e:

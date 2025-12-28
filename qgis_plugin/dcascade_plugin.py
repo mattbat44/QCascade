@@ -484,10 +484,10 @@ class DCascadePlugin:
             self.runner.simulation_finished.connect(self.on_simulation_finished)
             self.runner.start()
             
-            QMessageBox.information(
-                self.iface.mainWindow(),
-                "Simulation Started",
-                "Simulation started in background. Check the QGIS message log for progress."
+            QgsMessageLog.logMessage(
+                "Simulation started in background. Check the QGIS message log for progress.",
+                "D-CASCADE",
+                Qgis.Info
             )
             
         except Exception as e:
@@ -610,10 +610,10 @@ class DCascadePlugin:
             return
         try:
             config.to_json(path)
-            QMessageBox.information(
-                self.iface.mainWindow(),
-                "Configuration Saved",
-                f"Saved configuration to:\n{path}"
+            QgsMessageLog.logMessage(
+                f"Configuration saved to:\n{path}",
+                "D-CASCADE",
+                Qgis.Info
             )
         except Exception as e:
             QMessageBox.critical(
@@ -629,10 +629,10 @@ class DCascadePlugin:
                 data = json.load(f)
             cfg = DCascadeConfig(**data)
             self.apply_config_to_ui(cfg)
-            QMessageBox.information(
-                self.iface.mainWindow(),
-                "Configuration Loaded",
-                f"Loaded configuration from:\n{path}"
+            QgsMessageLog.logMessage(
+                f"Configuration loaded from:\n{path}",
+                "D-CASCADE",
+                Qgis.Info
             )
         except Exception as e:
             QMessageBox.critical(
@@ -660,10 +660,10 @@ class DCascadePlugin:
 
             cfg = DCascadeConfig(**config_dict)
             self.apply_config_to_ui(cfg)
-            QMessageBox.information(
-                self.iface.mainWindow(),
-                "Configuration Loaded",
-                f"Loaded configuration from run file:\n{path}"
+            QgsMessageLog.logMessage(
+                f"Configuration loaded from run file:\n{path}",
+                "D-CASCADE",
+                Qgis.Info
             )
         except Exception as e:
             QMessageBox.critical(
@@ -749,10 +749,10 @@ class DCascadePlugin:
     def on_simulation_finished(self, success, msg):
         """Handle simulation completion."""
         if success:
-            QMessageBox.information(
-                self.iface.mainWindow(),
-                "Simulation Finished",
-                msg
+            QgsMessageLog.logMessage(
+                msg,
+                "D-CASCADE",
+                Qgis.Info
             )
             # Auto-load results
             self.load_results_after_simulation()
