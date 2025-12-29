@@ -5,9 +5,8 @@
 
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QComboBox, QLabel, QMessageBox,
-    QFileDialog, QFormLayout, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QTabWidget, QSlider
+    QPushButton, QLabel, QMessageBox,
+    QFileDialog, QTabWidget
 )
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.core import Qgis, QgsMessageLog
@@ -16,7 +15,6 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import sys
-import pandas as pd
 import numpy as np
 from pathlib import Path
 
@@ -25,6 +23,13 @@ src_path = Path(__file__).parent.parent / 'src'
 sys.path.insert(0, str(src_path))
 
 from json_serializer import load_from_json, save_to_json
+
+from .results_viewer.time_series_tab import TimeSeriesTab
+from .results_viewer.spatial_tab import SpatialTab
+from .results_viewer.connectivity_tab import ConnectivityTab
+from .results_viewer.long_profile_tab import LongProfileTab
+from .results_viewer.animation_tab import AnimationTab
+from .results_viewer.stats_tab import StatsTab
 
 
 class ResultsViewerDock(QDockWidget):
@@ -105,28 +110,20 @@ class ResultsViewerDock(QDockWidget):
         # Tabs for different visualization types
         self.tab_widget = QTabWidget()
         
-        # Tab 1: Time Series Plots
-        self.time_series_tab = self.create_time_series_tab()
+        # Create tab components
+        self.time_series_tab = TimeSeriesTab(self)
+        self.spatial_tab = SpatialTab(self)
+        self.connectivity_tab = ConnectivityTab(self)
+        self.long_profile_tab = LongProfileTab(self)
+        self.animation_tab = AnimationTab(self)
+        self.stats_tab = StatsTab(self)
+        
+        # Add tabs to widget
         self.tab_widget.addTab(self.time_series_tab, "Time Series")
-        
-        # Tab 2: Spatial Plots
-        self.spatial_tab = self.create_spatial_tab()
         self.tab_widget.addTab(self.spatial_tab, "Spatial Analysis")
-        
-        # Tab 3: Connectivity
-        self.connectivity_tab = self.create_connectivity_tab()
         self.tab_widget.addTab(self.connectivity_tab, "Connectivity")
-
-        # Tab 4: Long Profile
-        self.long_profile_tab = self.create_long_profile_tab()
         self.tab_widget.addTab(self.long_profile_tab, "Long Profile")
-
-        # Tab 5: Animation controls (map + plot)
-        self.animation_tab = self.create_animation_tab()
         self.tab_widget.addTab(self.animation_tab, "Animation")
-        
-        # Tab 6: Statistics
-        self.stats_tab = self.create_stats_tab()
         self.tab_widget.addTab(self.stats_tab, "Statistics")
         
         self.main_layout.addWidget(self.tab_widget)
@@ -139,180 +136,58 @@ class ResultsViewerDock(QDockWidget):
         # Basic navigation toolbar for saving/zooming on right-click menu
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
 
+        # Connect signals from tabs
+        self.time_series_tab.ts_variable_combo.currentTextChanged.connect(self.update_time_series_plot)
+        self.time_series_tab.ts_reach_combo.currentIndexChanged.connect(self.update_time_series_plot)
+        self.time_series_tab.ts_multi_check.stateChanged.connect(self.update_time_series_plot)
+        self.time_series_tab.ts_grain_size_check.stateChanged.connect(self.update_time_series_plot)
+        self.time_series_tab.plot_btn.clicked.connect(self.update_time_series_plot)
+        
+        self.spatial_tab.spatial_variable_combo.currentTextChanged.connect(self.update_spatial_plot)
+        self.spatial_tab.spatial_agg_combo.currentTextChanged.connect(self.update_spatial_plot)
+        self.spatial_tab.spatial_year_spin.valueChanged.connect(self.update_spatial_plot)
+        self.spatial_tab.spatial_yearly_check.stateChanged.connect(self.update_spatial_plot)
+        self.spatial_tab.plot_btn.clicked.connect(self.update_spatial_plot)
+        
+        self.connectivity_tab.conn_variable_combo.currentTextChanged.connect(self.update_connectivity_plot)
+        self.connectivity_tab.plot_btn.clicked.connect(self.update_connectivity_plot)
+        
+        self.long_profile_tab.lp_update_btn.clicked.connect(lambda: self.update_long_profile_plot(use_slider=False))
+        self.long_profile_tab.lp_time_slider.valueChanged.connect(self.on_lp_time_slider_changed)
+        
+        self.animation_tab.dyn_variable_combo.currentTextChanged.connect(self._on_animation_setting_changed)
+        self.animation_tab.dyn_color_combo.currentTextChanged.connect(self._on_animation_setting_changed)
+        self.animation_tab.dyn_width_spin.valueChanged.connect(self._on_animation_setting_changed)
+        self.animation_tab.time_slider.valueChanged.connect(self.on_time_slider_changed)
+        self.animation_tab.play_btn.clicked.connect(self.animate_results)
+        self.animation_tab.frame_duration_spin.valueChanged.connect(self._on_animation_setting_changed)
+        
+        self.stats_tab.refresh_btn.clicked.connect(self.update_statistics)
+        
+        # Expose commonly accessed widgets for backward compatibility
+        self.ts_variable_combo = self.time_series_tab.ts_variable_combo
+        self.ts_reach_combo = self.time_series_tab.ts_reach_combo
+        self.ts_multi_check = self.time_series_tab.ts_multi_check
+        self.ts_grain_size_check = self.time_series_tab.ts_grain_size_check
+        self.spatial_variable_combo = self.spatial_tab.spatial_variable_combo
+        self.spatial_agg_combo = self.spatial_tab.spatial_agg_combo
+        self.spatial_year_spin = self.spatial_tab.spatial_year_spin
+        self.spatial_yearly_check = self.spatial_tab.spatial_yearly_check
+        self.conn_variable_combo = self.connectivity_tab.conn_variable_combo
+        self.lp_update_btn = self.long_profile_tab.lp_update_btn
+        self.lp_time_slider = self.long_profile_tab.lp_time_slider
+        self.lp_time_label = self.long_profile_tab.lp_time_label
+        self.dyn_variable_combo = self.animation_tab.dyn_variable_combo
+        self.dyn_color_combo = self.animation_tab.dyn_color_combo
+        self.dyn_width_spin = self.animation_tab.dyn_width_spin
+        self.time_slider = self.animation_tab.time_slider
+        self.time_label = self.animation_tab.time_label
+        self.play_btn = self.animation_tab.play_btn
+        self.frame_duration_spin = self.animation_tab.frame_duration_spin
+        self.stats_label = self.stats_tab.stats_label
+
         self.show_empty_plot()
     
-    def create_time_series_tab(self):
-        """Create time series visualization tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # Variable selection
-        var_layout = QFormLayout()
-        
-        self.ts_variable_combo = QComboBox()
-        self.ts_variable_combo.addItems([
-            'Volume out [m^3]',
-            'Volume in [m^3]',
-            'Transport capacity [m^3]',
-            'Sediment budget [m^3]',
-            'D50 active layer [m]',
-            'D50 volume out [m]',
-            'Elevation (Upstream) [m]',
-            'Elevation (Downstream) [m]',
-            'Elevation Change (Upstream) [m]'
-        ])
-        self.ts_variable_combo.currentTextChanged.connect(self.update_time_series_plot)
-        var_layout.addRow("Variable:", self.ts_variable_combo)
-        
-        # Reach selection
-        self.ts_reach_combo = QComboBox()
-        self.ts_reach_combo.setEnabled(False)
-        self.ts_reach_combo.currentIndexChanged.connect(self.update_time_series_plot)
-        var_layout.addRow("Reach:", self.ts_reach_combo)
-        
-        # Multi-reach checkbox
-        self.ts_multi_check = QCheckBox("Show all reaches")
-        self.ts_multi_check.stateChanged.connect(self.update_time_series_plot)
-        var_layout.addRow("", self.ts_multi_check)
-
-        # Grain size breakdown checkbox
-        self.ts_grain_size_check = QCheckBox("Breakdown by Grain Size")
-        self.ts_grain_size_check.stateChanged.connect(self.update_time_series_plot)
-        var_layout.addRow("", self.ts_grain_size_check)
-        
-        layout.addLayout(var_layout)
-        
-        # Plot button
-        plot_btn = QPushButton("Generate Plot")
-        plot_btn.clicked.connect(self.update_time_series_plot)
-        layout.addWidget(plot_btn)
-        
-        layout.addStretch()
-        
-        return tab
-    
-    def create_spatial_tab(self):
-        """Create spatial analysis tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # Variable selection
-        var_layout = QFormLayout()
-        
-        self.spatial_variable_combo = QComboBox()
-        self.spatial_variable_combo.addItems([
-            'Volume out [m^3]',
-            'Volume in [m^3]',
-            'Transport capacity [m^3]',
-            'Sediment budget [m^3]',
-            'D50 active layer [m]',
-            'D50 volume out [m]'
-        ])
-        self.spatial_variable_combo.currentTextChanged.connect(self.update_spatial_plot)
-        var_layout.addRow("Variable:", self.spatial_variable_combo)
-        
-        # Aggregation method
-        self.spatial_agg_combo = QComboBox()
-        self.spatial_agg_combo.addItems(['Mean', 'Median', 'Sum', 'Max', 'Min'])
-        self.spatial_agg_combo.currentTextChanged.connect(self.update_spatial_plot)
-        var_layout.addRow("Aggregation:", self.spatial_agg_combo)
-        
-        # Year/time range
-        self.spatial_year_spin = QSpinBox()
-        self.spatial_year_spin.setRange(0, 1000)
-        self.spatial_year_spin.setValue(0)
-        self.spatial_year_spin.setSuffix(" (0 = all)")
-        self.spatial_year_spin.valueChanged.connect(self.update_spatial_plot)
-        var_layout.addRow("Year:", self.spatial_year_spin)
-        
-        # Yearly profiles checkbox
-        self.spatial_yearly_check = QCheckBox("Show Yearly Profiles")
-        self.spatial_yearly_check.stateChanged.connect(self.update_spatial_plot)
-        var_layout.addRow("", self.spatial_yearly_check)
-
-        layout.addLayout(var_layout)
-        
-        # Plot button
-        plot_btn = QPushButton("Generate Spatial Plot")
-        plot_btn.clicked.connect(self.update_spatial_plot)
-        layout.addWidget(plot_btn)
-        
-        layout.addStretch()
-        
-        return tab
-
-    def create_animation_tab(self):
-        """Create animation tab to control map symbology and playback."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-
-        # Variable and color ramp selection
-        form = QFormLayout()
-        self.dyn_variable_combo = QComboBox()
-        self.dyn_variable_combo.addItems([
-            'Volume out [m^3]',
-            'Volume in [m^3]',
-            'Transport capacity [m^3]',
-            'Sediment budget [m^3]',
-            'D50 active layer [m]',
-            'D50 volume out [m]'
-        ])
-        self.dyn_variable_combo.currentTextChanged.connect(self._on_animation_setting_changed)
-        form.addRow("Variable:", self.dyn_variable_combo)
-
-        self.dyn_color_combo = QComboBox()
-        self.dyn_color_combo.addItems([
-            'Spectral', 'Viridis', 'Plasma', 'Magma', 'Inferno',
-            'Blues', 'Greens', 'Reds', 'BuGn', 'YlOrRd'
-        ])
-        self.dyn_color_combo.currentTextChanged.connect(self._on_animation_setting_changed)
-        form.addRow("Color ramp:", self.dyn_color_combo)
-
-        self.dyn_width_spin = QDoubleSpinBox()
-        self.dyn_width_spin.setRange(0.1, 10.0)
-        self.dyn_width_spin.setSingleStep(0.1)
-        self.dyn_width_spin.setValue(1.2)
-        self.dyn_width_spin.valueChanged.connect(self._on_animation_setting_changed)
-        form.addRow("Line width:", self.dyn_width_spin)
-
-        layout.addLayout(form)
-
-        # Time slider
-        slider_layout = QHBoxLayout()
-        slider_layout.addWidget(QLabel("Time Step:"))
-        self.time_slider = QSlider(Qt.Horizontal)
-        self.time_slider.setMinimum(0)
-        self.time_slider.setMaximum(100)
-        self.time_slider.setValue(0)
-        self.time_slider.setEnabled(False)
-        self.time_slider.valueChanged.connect(self.on_time_slider_changed)
-        slider_layout.addWidget(self.time_slider, 1)
-        self.time_label = QLabel("0 / 0")
-        slider_layout.addWidget(self.time_label)
-        layout.addLayout(slider_layout)
-
-        # Play button
-        play_layout = QHBoxLayout()
-        self.play_btn = QPushButton("▶ Play")
-        self.play_btn.setEnabled(False)
-        self.play_btn.clicked.connect(self.animate_results)
-        play_layout.addWidget(self.play_btn)
-        play_layout.addStretch()
-        layout.addLayout(play_layout)
-
-        #Animation frame duration
-        duration_control_layout = QHBoxLayout()
-        duration_control_layout.addWidget(QLabel("Frame Duration (ms):"))
-        self.frame_duration_spin = QSpinBox()
-        self.frame_duration_spin.setRange(50, 5000)
-        self.frame_duration_spin.setValue(200)
-        duration_control_layout.addWidget(self.frame_duration_spin)
-        layout.addLayout(duration_control_layout)
-        self.frame_duration_spin.valueChanged.connect(self._on_animation_setting_changed)
-
-        layout.addStretch()
-        return tab
     
     def on_time_slider_changed_wrapper(self, _):
         """Wrapper to handle variable change for animation."""
@@ -322,26 +197,6 @@ class ResultsViewerDock(QDockWidget):
         """Emit setting change and refresh current timestep."""
         self.animation_settings_changed.emit()
         self.on_time_slider_changed(self.time_slider.value())
-
-    def create_stats_tab(self):
-        """Create statistics summary tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        info_label = QLabel("Summary statistics for loaded results:")
-        layout.addWidget(info_label)
-        
-        self.stats_label = QLabel("No statistics available.")
-        self.stats_label.setWordWrap(True)
-        layout.addWidget(self.stats_label)
-        
-        refresh_btn = QPushButton("Refresh Statistics")
-        refresh_btn.clicked.connect(self.update_statistics)
-        layout.addWidget(refresh_btn)
-        
-        layout.addStretch()
-        
-        return tab
     
     def show_empty_plot(self):
         """Show empty plot message."""
@@ -865,32 +720,6 @@ class ResultsViewerDock(QDockWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
     
-    def create_connectivity_tab(self):
-        """Create connectivity/heatmap tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        var_layout = QFormLayout()
-        
-        self.conn_variable_combo = QComboBox()
-        self.conn_variable_combo.addItems([
-            'Volume out [m^3]',
-            'Volume in [m^3]',
-            'Transport capacity [m^3]',
-            'Sediment budget [m^3]'
-        ])
-        self.conn_variable_combo.currentTextChanged.connect(self.update_connectivity_plot)
-        var_layout.addRow("Variable:", self.conn_variable_combo)
-        
-        layout.addLayout(var_layout)
-        
-        plot_btn = QPushButton("Generate Heatmap")
-        plot_btn.clicked.connect(self.update_connectivity_plot)
-        layout.addWidget(plot_btn)
-        
-        layout.addStretch()
-        return tab
-
     def update_connectivity_plot(self):
         """Update connectivity heatmap (Time vs Reach)."""
         if self.results_data is None:
@@ -950,42 +779,6 @@ class ResultsViewerDock(QDockWidget):
         if hasattr(self, "play_btn"):
             self.play_btn.setText("▶ Play")
     
-
-    def create_long_profile_tab(self):
-        """Create long profile visualization tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        info_label = QLabel("Select a sequence of connected reaches in the map to view the long profile.")
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
-        
-        # Controls
-        controls_layout = QHBoxLayout()
-        
-        self.lp_update_btn = QPushButton("Update Profile from Selection")
-        self.lp_update_btn.clicked.connect(lambda: self.update_long_profile_plot(use_slider=False))
-        controls_layout.addWidget(self.lp_update_btn)
-        
-        layout.addLayout(controls_layout)
-        
-        # Time slider for long profile animation
-        slider_layout = QHBoxLayout()
-        slider_layout.addWidget(QLabel("Time Step:"))
-        self.lp_time_slider = QSlider(Qt.Horizontal)
-        self.lp_time_slider.setMinimum(0)
-        self.lp_time_slider.setMaximum(100)
-        self.lp_time_slider.setValue(0)
-        self.lp_time_slider.setEnabled(False)
-        self.lp_time_slider.valueChanged.connect(self.on_lp_time_slider_changed)
-        slider_layout.addWidget(self.lp_time_slider, 1)
-        self.lp_time_label = QLabel("0 / 0")
-        slider_layout.addWidget(self.lp_time_label)
-        layout.addLayout(slider_layout)
-        
-        layout.addStretch()
-        return tab
-
     def on_lp_time_slider_changed(self, value):
         """Handle long profile time slider change."""
         self.lp_time_label.setText(f"{value} / {self.lp_time_slider.maximum()}")
