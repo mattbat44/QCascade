@@ -5,7 +5,7 @@
 
 from qgis.PyQt.QtCore import Qt, QSettings
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog, QMenu, QToolButton
-from qgis.core import QgsProject, QgsVectorLayer, QgsMessageLog, Qgis, QgsGraduatedSymbolRenderer, QgsSymbol, QgsStyle, QgsStyle
+from qgis.core import QgsProject, QgsVectorLayer, QgsMessageLog, Qgis, QgsGraduatedSymbolRenderer, QgsSymbol, QgsStyle
 from qgis.gui import QgsMapToolIdentifyFeature
 import os
 import sys
@@ -23,6 +23,13 @@ from .docks.parameters_dock import ParametersDock
 from .docks.results_viewer_dock import ResultsViewerDock
 from .core.config_manager import DCascadeConfig, PathsConfig, SedimentConfig, TimeConfig, PhysicsConfig, OptionsConfig, ExternalInputsConfig
 from .core.runner_thread import RunnerThread
+
+# Constants for connectivity curves
+CONNECTIVITY_DATA_KEY = 'Direct connectivity [m^3]'
+MIN_DISTANCE_THRESHOLD = 1e-6
+CURVE_OFFSET_FACTOR = 0.3
+BEZIER_CURVE_POINTS = 20
+CONNECTIVITY_ALPHA = 200  # Transparency (0-255)
 
 
 class DCascadePlugin:
@@ -492,12 +499,11 @@ class DCascadePlugin:
             return
         
         # Check if Direct connectivity data exists
-        connectivity_key = 'Direct connectivity [m^3]'
-        if connectivity_key not in self.results_viewer_dock.results_data:
-            QgsMessageLog.logMessage(f"Cannot update connectivity: '{connectivity_key}' not found in results", "D-CASCADE", Qgis.Warning)
+        if CONNECTIVITY_DATA_KEY not in self.results_viewer_dock.results_data:
+            QgsMessageLog.logMessage(f"Cannot update connectivity: '{CONNECTIVITY_DATA_KEY}' not found in results", "D-CASCADE", Qgis.Warning)
             return
         
-        direct_connectivity = self.results_viewer_dock.results_data[connectivity_key]
+        direct_connectivity = self.results_viewer_dock.results_data[CONNECTIVITY_DATA_KEY]
         
         if time_step >= direct_connectivity.shape[0]:
             return
@@ -510,15 +516,12 @@ class DCascadePlugin:
             QgsGeometry,
             QgsPoint,
             QgsLineString,
-            QgsCategorizedSymbolRenderer,
             QgsSymbol,
-            QgsRendererCategory,
             QgsGraduatedSymbolRenderer,
             QgsRendererRange,
             QgsStyle
         )
         from qgis.PyQt.QtCore import QVariant
-        from qgis.PyQt.QtGui import QColor
         import numpy as np
         
         # Create or reuse connectivity layer
@@ -710,7 +713,7 @@ class DCascadePlugin:
                 
                 # Make the line partially transparent
                 color = sym.color()
-                color.setAlpha(200)  # 0-255, 200 = ~78% opacity
+                color.setAlpha(CONNECTIVITY_ALPHA)  # 0-255, 200 = ~78% opacity
                 sym.setColor(color)
                 
                 ranges.append(QgsRendererRange(lower, upper, sym, f"{lower:.2g}–{upper:.2g} m³"))
@@ -748,7 +751,7 @@ class DCascadePlugin:
         dy = y2 - y1
         length = math.sqrt(dx**2 + dy**2)
         
-        if length < 1e-6:
+        if length < MIN_DISTANCE_THRESHOLD:
             # Points are too close, return straight line
             points = [QgsPoint(x1, y1), QgsPoint(x2, y2)]
             return QgsGeometry(QgsLineString(points))
@@ -758,15 +761,14 @@ class DCascadePlugin:
         perp_y = dx / length
         
         # Control point offset
-        offset = curvature * length * 0.3  # 0.3 is an empirical factor for nice curves
+        offset = curvature * length * CURVE_OFFSET_FACTOR
         ctrl_x = mid_x + perp_x * offset
         ctrl_y = mid_y + perp_y * offset
         
         # Generate points along quadratic Bezier curve
-        num_points = 20
         points = []
-        for i in range(num_points + 1):
-            t = i / num_points
+        for i in range(BEZIER_CURVE_POINTS + 1):
+            t = i / BEZIER_CURVE_POINTS
             # Quadratic Bezier formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
             s = 1 - t
             x = s*s*x1 + 2*s*t*ctrl_x + t*t*x2
