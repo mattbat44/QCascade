@@ -184,6 +184,7 @@ class ResultsViewerDock(QDockWidget):
         self.time_label = self.animation_tab.time_label
         self.play_btn = self.animation_tab.play_btn
         self.frame_duration_spin = self.animation_tab.frame_duration_spin
+        self.connectivity_check = self.animation_tab.connectivity_check
         self.stats_label = self.stats_tab.stats_label
 
         self.show_empty_plot()
