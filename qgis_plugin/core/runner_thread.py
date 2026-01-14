@@ -1,71 +1,28 @@
 import sys
 import os
 import traceback
-import importlib.util
-from importlib.machinery import SourceFileLoader
+import subprocess
+from pathlib import Path
 from qgis.PyQt.QtCore import QThread, pyqtSignal
 
 # Ensure plugin-bundled src/json_runner are on path (src first to avoid plugin package shadowing)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 plugin_dir = os.path.realpath(os.path.abspath(os.path.join(current_dir, '..')))
-src_path = os.path.join(plugin_dir, 'src')
-json_runner_path = os.path.join(plugin_dir, 'json_runner')
+project_root = os.path.realpath(os.path.abspath(os.path.join(plugin_dir, '..')))
 
-for p in [json_runner_path, src_path]:
-    if p and os.path.isdir(p) and p not in sys.path:
-        sys.path.insert(0, p)
-
-run_simulation = None
-_last_import_error = ""
-
-def _load_run_simulation():
-    """Load run_simulation with multiple strategies; return callable or None."""
-    global _last_import_error
-    _last_import_error = ""
-    # 1) Direct import using sys.path
-    try:
-        from run_dcascade_json import run_simulation as fn  # type: ignore
-        return fn
-    except Exception as e:
-        _last_import_error = f"direct import failed: {e}\n{traceback.format_exc()}"
-
-    # 1b) Try package-style import json_runner.run_dcascade_json
-    try:
-        from json_runner.run_dcascade_json import run_simulation as fn  # type: ignore
-        return fn
-    except Exception as e:
-        _last_import_error = f"package import failed: {e}\n{traceback.format_exc()}"
-
-    # 2) Import by file path using importlib.util
-    loader_paths = [
-        os.path.join(json_runner_path, "run_dcascade_json.py"),
+def _find_uv_python():
+    """Find the Python executable from uv environment."""
+    # Check for .venv in project root
+    venv_paths = [
+        Path(project_root) / '.venv' / 'Scripts' / 'python.exe',
+        Path(project_root) / '.venv' / 'bin' / 'python',
     ]
-    for loader_path in loader_paths:
-        try:
-            spec = importlib.util.spec_from_file_location("run_dcascade_json", loader_path)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)  # type: ignore
-                fn = getattr(module, "run_simulation", None)
-                if callable(fn):
-                    return fn
-        except Exception as e:
-            _last_import_error = f"spec_from_file_location failed ({loader_path}): {e}\n{traceback.format_exc()}"
-
-    # 3) Legacy SourceFileLoader fallback
-    for loader_path in loader_paths:
-        try:
-            module = SourceFileLoader("run_dcascade_json", loader_path).load_module()
-            fn = getattr(module, "run_simulation", None)
-            if callable(fn):
-                return fn
-        except Exception as e:
-            _last_import_error = f"SourceFileLoader fallback failed ({loader_path}): {e}\n{traceback.format_exc()}"
-
-    return None
-
-# Attempt load on module import
-run_simulation = _load_run_simulation()
+    for venv_path in venv_paths:
+        if venv_path.exists():
+            return str(venv_path)
+    
+    # Fallback to system python if no venv found
+    return sys.executable
 
 
 class RunnerThread(QThread):
@@ -75,40 +32,52 @@ class RunnerThread(QThread):
     def __init__(self, config_path):
         super().__init__()
         self.config_path = config_path
+        self.process = None
 
     def run(self):
         self.log_message.emit(f"Starting simulation with config: {self.config_path}")
+        
         try:
-            # Redirect stdout/stderr to capture logs?
-            # For now, just run it.
+            # Find the Python executable from uv environment
+            python_exe = _find_uv_python()
+            self.log_message.emit(f"Using Python: {python_exe}")
             
-            # We need to make sure run_simulation doesn't sys.exit() on us.
-            # The original script does sys.exit(1) on validation failure.
-            # We should probably wrap it or modify it, but let's try running it.
+            # Find the run script
+            run_script = Path(plugin_dir) / 'json_runner' / 'run_dcascade_json.py'
+            if not run_script.exists():
+                raise FileNotFoundError(f"Run script not found: {run_script}")
             
-            # Since run_simulation is a function, we can call it.
-            # However, it prints to stdout.
+            # Run the simulation in a subprocess
+            cmd = [python_exe, str(run_script), str(self.config_path)]
+            self.log_message.emit(f"Running command: {' '.join(cmd)}")
             
-            fn = run_simulation or _load_run_simulation()
-            if fn is None:
-                err_msg = "run_simulation could not be loaded"
-                if _last_import_error:
-                    err_msg = f"{err_msg}: {_last_import_error}"
-                    self.log_message.emit(err_msg)
-                raise ImportError(err_msg)
-
-            fn(self.config_path)
+            # Use subprocess with stdout/stderr capture
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                cwd=str(project_root)
+            )
             
-            self.log_message.emit("Simulation completed successfully.")
-            self.simulation_finished.emit(True, "Simulation Done")
+            # Stream output in real-time
+            for line in iter(self.process.stdout.readline, ''):
+                if line:
+                    self.log_message.emit(line.rstrip())
             
-        except SystemExit as e:
-            if e.code != 0:
-                self.log_message.emit(f"Simulation failed with exit code {e.code}")
-                self.simulation_finished.emit(False, "Simulation Failed")
-            else:
-                self.log_message.emit("Simulation completed.")
+            # Wait for completion
+            self.process.wait()
+            return_code = self.process.returncode
+            
+            if return_code == 0:
+                self.log_message.emit("Simulation completed successfully.")
                 self.simulation_finished.emit(True, "Simulation Done")
+            else:
+                self.log_message.emit(f"Simulation failed with exit code {return_code}")
+                self.simulation_finished.emit(False, f"Exit code: {return_code}")
+                
         except Exception as e:
             self.log_message.emit(f"Error: {str(e)}")
             self.log_message.emit(traceback.format_exc())

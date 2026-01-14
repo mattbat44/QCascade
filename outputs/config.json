@@ -1,9 +1,9 @@
 {
     "paths": {
-        "river_network_shp": "C:\\Users\\matta\\Documents\\dcascade-py-2.0.0\\inputs\\input_trial\\River_Network.shp",
-        "discharge_csv": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/Q_Vjosa.csv",
+        "river_network_shp": "../inputs/input_trial/River_Network.shp",
+        "discharge_csv": "../inputs/input_trial/Q_Vjosa.csv",
         "output_name": "qgis_test",
-        "output_dir": "C:/Users/maad/GIS_Local/D-CASCADE-PY/dcascade-py-2.0.0/outputs",
+        "output_dir": "./cascade_results",
         "overbank_q_csv": null
     },
     "sediment": {
