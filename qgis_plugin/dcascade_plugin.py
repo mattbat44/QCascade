@@ -5,7 +5,7 @@
 
 from qgis.PyQt.QtCore import Qt, QSettings
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog, QMenu, QToolButton
-from qgis.core import QgsProject, QgsVectorLayer, QgsMessageLog, Qgis, QgsGraduatedSymbolRenderer, QgsSymbol, QgsStyle, QgsStyle
+from qgis.core import QgsProject, QgsVectorLayer, QgsMessageLog, Qgis, QgsGraduatedSymbolRenderer, QgsSymbol, QgsStyle
 from qgis.gui import QgsMapToolIdentifyFeature
 import os
 import sys
@@ -23,6 +23,16 @@ from .docks.parameters_dock import ParametersDock
 from .docks.results_viewer_dock import ResultsViewerDock
 from .core.config_manager import DCascadeConfig, PathsConfig, SedimentConfig, TimeConfig, PhysicsConfig, OptionsConfig, ExternalInputsConfig
 from .core.runner_thread import RunnerThread
+
+# Constants for connectivity curves
+CONNECTIVITY_DATA_KEY = 'Direct connectivity [m^3]'
+MIN_DISTANCE_THRESHOLD = 1e-6
+CURVE_OFFSET_FACTOR = 0.3
+BEZIER_CURVE_POINTS = 20
+CONNECTIVITY_WIDTH_CLASSES = 8  # Number of width classes
+CONNECTIVITY_MIN_WIDTH = 0.3  # Minimum line width in mm
+CONNECTIVITY_MAX_WIDTH = 3.0  # Maximum line width in mm
+CONNECTIVITY_COLOR = '#2E86AB'  # Single color for connectivity curves (blue)
 
 
 class DCascadePlugin:
@@ -44,6 +54,7 @@ class DCascadePlugin:
         self.parameters_action = None
         self.results_action = None
         self.animation_layer = None
+        self.connectivity_layer = None  # Layer for connectivity curves
         
         # Layer and selection tracking
         self.network_layer = None
@@ -51,6 +62,8 @@ class DCascadePlugin:
         self.results_data = None
         self.current_time_step = 0
         self.animation_field = None  # Field name used for animation
+        self.connectivity_enabled = False  # Toggle for connectivity curves
+        self.connectivity_width_ranges = None  # Global width ranges for consistent animation
         
         # Initialize plugin
         self.init_plugin()
@@ -90,6 +103,7 @@ class DCascadePlugin:
         self.results_viewer_dock.reach_selected_for_graph.connect(self.graph_reach)
         self.results_viewer_dock.results_loaded.connect(self.on_results_loaded)
         self.results_viewer_dock.animation_settings_changed.connect(lambda: self.on_time_step_changed(self.current_time_step))
+        self.results_viewer_dock.connectivity_check.stateChanged.connect(self.on_connectivity_toggled)
         
         # Connect map canvas selection
         self.canvas.selectionChanged.connect(self.on_map_selection_changed)
@@ -153,9 +167,29 @@ class DCascadePlugin:
             self.results_viewer_dock.close()
         # Remove temporary animation layer if present
         if self.animation_layer:
-            from qgis.core import QgsProject
-            QgsProject.instance().removeMapLayer(self.animation_layer.id())
-            self.animation_layer = None
+            try:
+                from qgis.core import QgsProject
+                if not self.animation_layer.isValid():
+                    self.animation_layer = None
+                else:
+                    QgsProject.instance().removeMapLayer(self.animation_layer.id())
+                    self.animation_layer = None
+            except (RuntimeError, AttributeError):
+                # Layer already deleted by QGIS
+                self.animation_layer = None
+        
+        # Remove connectivity curves layer if present
+        if self.connectivity_layer:
+            try:
+                from qgis.core import QgsProject
+                if not self.connectivity_layer.isValid():
+                    self.connectivity_layer = None
+                else:
+                    QgsProject.instance().removeMapLayer(self.connectivity_layer.id())
+                    self.connectivity_layer = None
+            except (RuntimeError, AttributeError):
+                # Layer already deleted by QGIS
+                self.connectivity_layer = None
         
         # Disconnect signals
         if self.canvas:
@@ -294,6 +328,11 @@ class DCascadePlugin:
         """Handle results loaded signal."""
         # Initialize animation layer at time step 0
         self.on_time_step_changed(0)
+    
+    def on_connectivity_toggled(self, state):
+        """Handle connectivity curves checkbox toggle."""
+        enabled = (state == 2)  # Qt.Checked = 2
+        self.toggle_connectivity_curves(enabled)
 
     def on_time_step_changed(self, time_step):
         """Handle time step change in results viewer - update layer symbology."""
@@ -304,6 +343,10 @@ class DCascadePlugin:
         
         # Update layer symbology based on current time step
         self.update_layer_symbology(time_step)
+        
+        # Update connectivity curves if enabled
+        if self.connectivity_enabled:
+            self.update_connectivity_curves(time_step)
     
     def update_layer_symbology(self, time_step):
         """Update network layer symbology based on results for given time step."""
@@ -462,6 +505,339 @@ class DCascadePlugin:
             self._animation_renderer_ramp = ramp_name
             self._animation_renderer_width = line_width
         self.animation_layer.triggerRepaint()
+        self.canvas.refresh()
+    
+    def update_connectivity_curves(self, time_step):
+        """Update connectivity curves layer based on Direct connectivity data for given time step."""
+        if self.network_layer is None:
+            QgsMessageLog.logMessage("Cannot update connectivity: No network layer selected", "D-CASCADE", Qgis.Warning)
+            return
+        
+        if self.results_viewer_dock.results_data is None:
+            return
+        
+        # Check if Direct connectivity data exists
+        if CONNECTIVITY_DATA_KEY not in self.results_viewer_dock.results_data:
+            QgsMessageLog.logMessage(f"Cannot update connectivity: '{CONNECTIVITY_DATA_KEY}' not found in results", "D-CASCADE", Qgis.Warning)
+            return
+        
+        direct_connectivity = self.results_viewer_dock.results_data[CONNECTIVITY_DATA_KEY]
+        
+        if time_step >= direct_connectivity.shape[0]:
+            return
+        
+        from qgis.core import (
+            QgsVectorLayer,
+            QgsField,
+            QgsFeature,
+            QgsProject,
+            QgsGeometry,
+            QgsPoint,
+            QgsLineString,
+            QgsSymbol,
+            QgsGraduatedSymbolRenderer,
+            QgsRendererRange,
+            QgsStyle
+        )
+        from qgis.PyQt.QtCore import QVariant
+        import numpy as np
+        
+        # Create or reuse connectivity layer
+        if self.connectivity_layer is None:
+            uri = "LineString?crs=" + self.network_layer.crs().authid()
+            self.connectivity_layer = QgsVectorLayer(uri, "D-CASCADE Connectivity", "memory")
+            prov = self.connectivity_layer.dataProvider()
+            prov.addAttributes([
+                QgsField("from_reach", QVariant.Int),
+                QgsField("to_reach", QVariant.Int),
+                QgsField("volume", QVariant.Double),
+                QgsField("to_outlet", QVariant.Int),  # 1 if going to outlet, 0 otherwise
+            ])
+            self.connectivity_layer.updateFields()
+            QgsProject.instance().addMapLayer(self.connectivity_layer)
+            
+            # Move connectivity layer above animation layer for visibility
+            root = QgsProject.instance().layerTreeRoot()
+            anim_node = root.findLayer(self.animation_layer.id()) if self.animation_layer else None
+            conn_node = root.findLayer(self.connectivity_layer.id())
+            if anim_node and conn_node:
+                parent = anim_node.parent() or root
+                conn_parent = conn_node.parent() or root
+                try:
+                    idx = parent.children().index(anim_node)
+                    parent.insertChildNode(idx, conn_node.clone())
+                    conn_parent.removeChildNode(conn_node)
+                except (ValueError, AttributeError):
+                    pass
+        else:
+            prov = self.connectivity_layer.dataProvider()
+            prov.truncate()
+        
+        # Extract sediment transport data for given timestep
+        transport_data = direct_connectivity[time_step, :, :-1]  # Sediment depositing in reaches
+        qout_data = direct_connectivity[time_step, :, -1]  # Sediment passing the outlet
+        
+        # Build position map for reach centroids
+        pos = {}
+        reach_fromn = []
+        from_n_idx = self.network_layer.fields().indexFromName('FromN')
+        
+        for feature in self.network_layer.getFeatures():
+            from_n = feature.attribute(from_n_idx)
+            geom = feature.geometry()
+            if geom and not geom.isEmpty():
+                centroid = geom.centroid().asPoint()
+                pos[int(from_n)] = (centroid.x(), centroid.y())
+                reach_fromn.append(int(from_n))
+        
+        reach_fromn = sorted(reach_fromn)
+        
+        # Find outlet reach (last reach in the network)
+        # Identify outlet as reach with no downstream connection
+        to_n_idx = self.network_layer.fields().indexFromName('ToN')
+        outlet_coords = None
+        outlet_fromn = None
+        
+        if to_n_idx >= 0:
+            all_to_n = set()
+            all_from_n = set()
+            
+            for feature in self.network_layer.getFeatures():
+                from_n = feature.attribute(from_n_idx)
+                to_n = feature.attribute(to_n_idx)
+                if from_n is not None:
+                    all_from_n.add(int(from_n))
+                if to_n is not None and to_n != -1 and to_n != 0:
+                    all_to_n.add(int(to_n))
+            
+            # Outlet is a node that is not in the to_n set
+            potential_outlets = all_from_n - all_to_n
+            if potential_outlets:
+                outlet_fromn = max(potential_outlets)  # Use the largest FromN as outlet
+                
+                # Get the downstream end of the outlet reach
+                for feature in self.network_layer.getFeatures():
+                    from_n = feature.attribute(from_n_idx)
+                    if from_n == outlet_fromn:
+                        geom = feature.geometry()
+                        if geom and not geom.isEmpty():
+                            # Get the last point of the geometry
+                            if geom.isMultipart():
+                                parts = geom.asMultiPolyline()
+                                if parts:
+                                    outlet_coords = parts[-1][-1]
+                            else:
+                                line = geom.asPolyline()
+                                if line:
+                                    outlet_coords = line[-1]
+                        break
+        
+        # Generate arc features
+        features = []
+        
+        # Arcs between reaches
+        for i in range(transport_data.shape[0]):
+            for j in range(transport_data.shape[1]):
+                volume = transport_data[i, j]
+                if volume > 0:
+                    start_reach = reach_fromn[i] if i < len(reach_fromn) else None
+                    dest_reach = reach_fromn[j] if j < len(reach_fromn) else None
+                    
+                    if start_reach is not None and dest_reach is not None:
+                        if start_reach in pos and dest_reach in pos:
+                            start_pos = pos[start_reach]
+                            dest_pos = pos[dest_reach]
+                            
+                            # Create curved line geometry
+                            line_geom = self._create_arc_geometry(start_pos, dest_pos, -0.6)
+                            
+                            f = QgsFeature(self.connectivity_layer.fields())
+                            f.setGeometry(line_geom)
+                            f.setAttribute("from_reach", start_reach)
+                            f.setAttribute("to_reach", dest_reach)
+                            f.setAttribute("volume", float(volume))
+                            f.setAttribute("to_outlet", 0)
+                            features.append(f)
+        
+        # Arcs to outlet
+        if outlet_coords is not None:
+            for i, vol in enumerate(qout_data):
+                if vol > 0:
+                    reach_id = reach_fromn[i] if i < len(reach_fromn) else None
+                    if reach_id is not None and reach_id in pos:
+                        start_pos = pos[reach_id]
+                        dest_pos = (outlet_coords.x(), outlet_coords.y())
+                        
+                        # Create curved line geometry with opposite curvature
+                        line_geom = self._create_arc_geometry(start_pos, dest_pos, 0.35)
+                        
+                        f = QgsFeature(self.connectivity_layer.fields())
+                        f.setGeometry(line_geom)
+                        f.setAttribute("from_reach", reach_id)
+                        f.setAttribute("to_reach", -1)  # -1 indicates outlet
+                        f.setAttribute("volume", float(vol))
+                        f.setAttribute("to_outlet", 1)
+                        features.append(f)
+        
+        if features:
+            prov.addFeatures(features)
+            self.connectivity_layer.updateExtents()
+        
+        # Calculate or reuse global width ranges for consistent animation
+        if self.connectivity_width_ranges is None:
+            self.connectivity_width_ranges = self._calculate_global_width_ranges()
+        
+        # Apply width-based graduated symbology
+        if self.connectivity_width_ranges:
+            from qgis.PyQt.QtGui import QColor
+            
+            symbol = QgsSymbol.defaultSymbol(self.connectivity_layer.geometryType())
+            base_color = QColor(CONNECTIVITY_COLOR)
+            
+            ranges = []
+            for i, (lower, upper, width) in enumerate(self.connectivity_width_ranges):
+                sym = symbol.clone()
+                
+                # Set width based on class
+                try:
+                    if hasattr(sym, "setWidth"):
+                        sym.setWidth(width)
+                except Exception:
+                    pass
+                
+                # Use consistent color for all classes
+                sym.setColor(base_color)
+                
+                # Format label based on magnitude
+                if lower < 0.01:
+                    label = f"{lower:.2e}–{upper:.2e} m³"
+                elif lower < 1:
+                    label = f"{lower:.3f}–{upper:.3f} m³"
+                elif lower < 1000:
+                    label = f"{lower:.1f}–{upper:.1f} m³"
+                else:
+                    label = f"{lower:.2g}–{upper:.2g} m³"
+                
+                ranges.append(QgsRendererRange(lower, upper, sym, label))
+            
+            renderer = QgsGraduatedSymbolRenderer("volume", ranges)
+            renderer.setMode(QgsGraduatedSymbolRenderer.Custom)
+            self.connectivity_layer.setRenderer(renderer)
+        
+        self.connectivity_layer.triggerRepaint()
+        self.canvas.refresh()
+    
+    def _calculate_global_width_ranges(self):
+        """Calculate global width ranges from all timesteps for consistent animation.
+        
+        Returns:
+            List of tuples (lower_bound, upper_bound, width_mm) for each class,
+            or None if data not available.
+        """
+        if self.results_viewer_dock.results_data is None:
+            return None
+        
+        if CONNECTIVITY_DATA_KEY not in self.results_viewer_dock.results_data:
+            return None
+        
+        import numpy as np
+        
+        direct_connectivity = self.results_viewer_dock.results_data[CONNECTIVITY_DATA_KEY]
+        
+        # Get all non-zero volumes across all timesteps
+        all_volumes = direct_connectivity[direct_connectivity > 0]
+        
+        if len(all_volumes) == 0:
+            return None
+        
+        # Use logarithmic scale for better distribution
+        vmin = max(1e-6, np.min(all_volumes))
+        vmax = np.max(all_volumes)
+        
+        log_min = np.log10(vmin)
+        log_max = np.log10(vmax)
+        log_step = (log_max - log_min) / CONNECTIVITY_WIDTH_CLASSES
+        
+        # Calculate width range
+        width_step = (CONNECTIVITY_MAX_WIDTH - CONNECTIVITY_MIN_WIDTH) / CONNECTIVITY_WIDTH_CLASSES
+        
+        ranges = []
+        for i in range(CONNECTIVITY_WIDTH_CLASSES):
+            lower = 10 ** (log_min + i * log_step)
+            upper = 10 ** (log_min + (i + 1) * log_step) if i < CONNECTIVITY_WIDTH_CLASSES - 1 else vmax
+            width = CONNECTIVITY_MIN_WIDTH + (i + 1) * width_step  # Width increases with class
+            ranges.append((lower, upper, width))
+        
+        return ranges
+    
+    def _create_arc_geometry(self, start_pos, end_pos, curvature):
+        """Create a curved arc geometry between two points using Bezier curve approximation.
+        
+        Args:
+            start_pos: Tuple (x, y) for start point
+            end_pos: Tuple (x, y) for end point
+            curvature: Curvature factor (positive curves right, negative curves left)
+        
+        Returns:
+            QgsGeometry: Line geometry representing the arc
+        """
+        from qgis.core import QgsGeometry, QgsPoint, QgsLineString
+        import math
+        
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        
+        # Calculate midpoint
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        
+        # Calculate perpendicular offset for control point
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx**2 + dy**2)
+        
+        if length < MIN_DISTANCE_THRESHOLD:
+            # Points are too close, return straight line
+            points = [QgsPoint(x1, y1), QgsPoint(x2, y2)]
+            return QgsGeometry(QgsLineString(points))
+        
+        # Perpendicular direction (rotated 90 degrees)
+        perp_x = -dy / length
+        perp_y = dx / length
+        
+        # Control point offset
+        offset = curvature * length * CURVE_OFFSET_FACTOR
+        ctrl_x = mid_x + perp_x * offset
+        ctrl_y = mid_y + perp_y * offset
+        
+        # Generate points along quadratic Bezier curve
+        points = []
+        for i in range(BEZIER_CURVE_POINTS + 1):
+            t = i / BEZIER_CURVE_POINTS
+            # Quadratic Bezier formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+            s = 1 - t
+            x = s*s*x1 + 2*s*t*ctrl_x + t*t*x2
+            y = s*s*y1 + 2*s*t*ctrl_y + t*t*y2
+            points.append(QgsPoint(x, y))
+        
+        return QgsGeometry(QgsLineString(points))
+    
+    def toggle_connectivity_curves(self, enabled):
+        """Toggle visibility of connectivity curves."""
+        self.connectivity_enabled = enabled
+        
+        if enabled:
+            # Recalculate width ranges when enabling
+            self.connectivity_width_ranges = None
+            # Show connectivity layer and update it
+            if self.connectivity_layer:
+                self.connectivity_layer.setVisible(True)
+            self.update_connectivity_curves(self.current_time_step)
+        else:
+            # Hide connectivity layer
+            if self.connectivity_layer:
+                self.connectivity_layer.setVisible(False)
+        
         self.canvas.refresh()
     
     def graph_reach(self, reach_idx):
@@ -780,9 +1156,9 @@ class DCascadePlugin:
             
             # Construct results path
             if Path(output_dir).is_absolute():
-                results_path = Path(output_dir) / f"{output_name}.p"
+                results_path = Path(output_dir) / f"{output_name}.json"
             else:
-                results_path = Path.cwd() / output_dir / f"{output_name}.p"
+                results_path = Path.cwd() / output_dir / f"{output_name}.json"
             
             if results_path.exists():
                 self.results_viewer_dock.load_results_from_path(str(results_path))

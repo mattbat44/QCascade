@@ -1,9 +1,12 @@
 import pickle
 import numpy as np
 import os
+from pathlib import Path
 
-file_path = r"c:\Users\matta\Documents\dcascade-py-2.0.0\cascade_results\vjosa_gui.p"
-ext_file_path = r"c:\Users\matta\Documents\dcascade-py-2.0.0\cascade_results\vjosa_gui_ext.p"
+# Use relative paths from project root
+project_root = Path(__file__).parent
+file_path = project_root / "cascade_results" / "vjosa_gui.p"
+ext_file_path = project_root / "cascade_results" / "vjosa_gui_ext.p"
 
 def inspect_pickle(path):
     if os.path.exists(path):
