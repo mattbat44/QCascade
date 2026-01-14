@@ -19,3 +19,5 @@ test_config.json
 inputs/*
 inputs
 inputs/
+
+dcascade-qgis-env/

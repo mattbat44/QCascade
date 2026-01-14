@@ -1,9 +1,10 @@
 {
     "paths": {
-        "river_network_shp": "C:\\Users\\matta\\Documents\\dcascade-py-2.0.0\\inputs\\input_trial\\River_Network.shp",
-        "discharge_csv": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/Q_Vjosa.csv",
+        "river_network_shp": "C:\\Users\\maad\\GIS_Local\\D-CASCADE-PY\\dcascade-py-2.0.0\\inputs\\input_trial\\River_Network.shp",
+        "discharge_csv": "C:/Users/maad/Downloads/dcascade-py-2.0.0-qgis-plugin/dcascade-py-2.0.0-qgis-plugin/inputs/input_trial/Q_Vjosa.csv",
         "output_name": "qgis_test",
-        "output_dir": "C:/Users/matta/Documents/dcascade-py-2.0.0/cascade_results"
+        "output_dir": "C:/Users/maad/GIS_Local/D-CASCADE-PY/dcascade-py-2.0.0/outputs",
+        "overbank_q_csv": null
     },
     "sediment": {
         "range": [
@@ -36,17 +37,5 @@
         "round_parameter": 0,
         "force_pass_external_inputs": true
     },
-    "external_inputs": {
-        "dir": null,
-        "csv_files": null,
-        "tensor_npy": null,
-        "per_reach_csvs": [
-            {
-                "reach_idx": 1,
-                "path": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/External inputs/reach_1.csv"
-            }
-        ],
-        "grain_unit": "mm",
-        "default_sigma_g": 1.6
-    }
+    "external_inputs": null
 }

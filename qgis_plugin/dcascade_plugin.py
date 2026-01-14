@@ -29,7 +29,10 @@ CONNECTIVITY_DATA_KEY = 'Direct connectivity [m^3]'
 MIN_DISTANCE_THRESHOLD = 1e-6
 CURVE_OFFSET_FACTOR = 0.3
 BEZIER_CURVE_POINTS = 20
-CONNECTIVITY_ALPHA = 200  # Transparency (0-255)
+CONNECTIVITY_WIDTH_CLASSES = 8  # Number of width classes
+CONNECTIVITY_MIN_WIDTH = 0.3  # Minimum line width in mm
+CONNECTIVITY_MAX_WIDTH = 3.0  # Maximum line width in mm
+CONNECTIVITY_COLOR = '#2E86AB'  # Single color for connectivity curves (blue)
 
 
 class DCascadePlugin:
@@ -60,6 +63,7 @@ class DCascadePlugin:
         self.current_time_step = 0
         self.animation_field = None  # Field name used for animation
         self.connectivity_enabled = False  # Toggle for connectivity curves
+        self.connectivity_width_ranges = None  # Global width ranges for consistent animation
         
         # Initialize plugin
         self.init_plugin()
@@ -163,15 +167,29 @@ class DCascadePlugin:
             self.results_viewer_dock.close()
         # Remove temporary animation layer if present
         if self.animation_layer:
-            from qgis.core import QgsProject
-            QgsProject.instance().removeMapLayer(self.animation_layer.id())
-            self.animation_layer = None
+            try:
+                from qgis.core import QgsProject
+                if not self.animation_layer.isValid():
+                    self.animation_layer = None
+                else:
+                    QgsProject.instance().removeMapLayer(self.animation_layer.id())
+                    self.animation_layer = None
+            except (RuntimeError, AttributeError):
+                # Layer already deleted by QGIS
+                self.animation_layer = None
         
         # Remove connectivity curves layer if present
         if self.connectivity_layer:
-            from qgis.core import QgsProject
-            QgsProject.instance().removeMapLayer(self.connectivity_layer.id())
-            self.connectivity_layer = None
+            try:
+                from qgis.core import QgsProject
+                if not self.connectivity_layer.isValid():
+                    self.connectivity_layer = None
+                else:
+                    QgsProject.instance().removeMapLayer(self.connectivity_layer.id())
+                    self.connectivity_layer = None
+            except (RuntimeError, AttributeError):
+                # Layer already deleted by QGIS
+                self.connectivity_layer = None
         
         # Disconnect signals
         if self.canvas:
@@ -665,58 +683,42 @@ class DCascadePlugin:
             prov.addFeatures(features)
             self.connectivity_layer.updateExtents()
         
-        # Apply graduated symbology based on volume
-        symbol = QgsSymbol.defaultSymbol(self.connectivity_layer.geometryType())
+        # Calculate or reuse global width ranges for consistent animation
+        if self.connectivity_width_ranges is None:
+            self.connectivity_width_ranges = self._calculate_global_width_ranges()
         
-        # Get all volumes to determine range
-        all_volumes = [f.attribute("volume") for f in features if f.attribute("volume") > 0]
-        if all_volumes:
-            vmin = max(1, min(all_volumes))  # Use log scale, so min should be >= 1
-            vmax = max(all_volumes)
+        # Apply width-based graduated symbology
+        if self.connectivity_width_ranges:
+            from qgis.PyQt.QtGui import QColor
             
-            # Get color ramp and line width from animation tab
-            ramp_name = "Viridis"
-            line_width = 2.0
-            try:
-                ramp_name = self.results_viewer_dock.dyn_color_combo.currentText()
-                line_width = float(self.results_viewer_dock.dyn_width_spin.value())
-            except Exception:
-                pass
-            
-            style = QgsStyle.defaultStyle()
-            ramp = style.colorRamp(ramp_name)
-            if ramp is None:
-                ramp = style.defaultColorRamp()
-            
-            # Create graduated renderer with log scale
-            classes = 5
-            log_min = np.log10(vmin)
-            log_max = np.log10(vmax)
-            log_step = (log_max - log_min) / classes
+            symbol = QgsSymbol.defaultSymbol(self.connectivity_layer.geometryType())
+            base_color = QColor(CONNECTIVITY_COLOR)
             
             ranges = []
-            for i in range(classes):
-                lower = 10 ** (log_min + i * log_step)
-                upper = 10 ** (log_min + (i + 1) * log_step) if i < classes - 1 else vmax
-                
+            for i, (lower, upper, width) in enumerate(self.connectivity_width_ranges):
                 sym = symbol.clone()
+                
+                # Set width based on class
                 try:
                     if hasattr(sym, "setWidth"):
-                        sym.setWidth(line_width)
+                        sym.setWidth(width)
                 except Exception:
                     pass
                 
-                # Set color from ramp
-                if ramp:
-                    t = i / max(classes - 1, 1)
-                    sym.setColor(ramp.color(t))
+                # Use consistent color for all classes
+                sym.setColor(base_color)
                 
-                # Make the line partially transparent
-                color = sym.color()
-                color.setAlpha(CONNECTIVITY_ALPHA)  # 0-255, 200 = ~78% opacity
-                sym.setColor(color)
+                # Format label based on magnitude
+                if lower < 0.01:
+                    label = f"{lower:.2e}–{upper:.2e} m³"
+                elif lower < 1:
+                    label = f"{lower:.3f}–{upper:.3f} m³"
+                elif lower < 1000:
+                    label = f"{lower:.1f}–{upper:.1f} m³"
+                else:
+                    label = f"{lower:.2g}–{upper:.2g} m³"
                 
-                ranges.append(QgsRendererRange(lower, upper, sym, f"{lower:.2g}–{upper:.2g} m³"))
+                ranges.append(QgsRendererRange(lower, upper, sym, label))
             
             renderer = QgsGraduatedSymbolRenderer("volume", ranges)
             renderer.setMode(QgsGraduatedSymbolRenderer.Custom)
@@ -724,6 +726,49 @@ class DCascadePlugin:
         
         self.connectivity_layer.triggerRepaint()
         self.canvas.refresh()
+    
+    def _calculate_global_width_ranges(self):
+        """Calculate global width ranges from all timesteps for consistent animation.
+        
+        Returns:
+            List of tuples (lower_bound, upper_bound, width_mm) for each class,
+            or None if data not available.
+        """
+        if self.results_viewer_dock.results_data is None:
+            return None
+        
+        if CONNECTIVITY_DATA_KEY not in self.results_viewer_dock.results_data:
+            return None
+        
+        import numpy as np
+        
+        direct_connectivity = self.results_viewer_dock.results_data[CONNECTIVITY_DATA_KEY]
+        
+        # Get all non-zero volumes across all timesteps
+        all_volumes = direct_connectivity[direct_connectivity > 0]
+        
+        if len(all_volumes) == 0:
+            return None
+        
+        # Use logarithmic scale for better distribution
+        vmin = max(1e-6, np.min(all_volumes))
+        vmax = np.max(all_volumes)
+        
+        log_min = np.log10(vmin)
+        log_max = np.log10(vmax)
+        log_step = (log_max - log_min) / CONNECTIVITY_WIDTH_CLASSES
+        
+        # Calculate width range
+        width_step = (CONNECTIVITY_MAX_WIDTH - CONNECTIVITY_MIN_WIDTH) / CONNECTIVITY_WIDTH_CLASSES
+        
+        ranges = []
+        for i in range(CONNECTIVITY_WIDTH_CLASSES):
+            lower = 10 ** (log_min + i * log_step)
+            upper = 10 ** (log_min + (i + 1) * log_step) if i < CONNECTIVITY_WIDTH_CLASSES - 1 else vmax
+            width = CONNECTIVITY_MIN_WIDTH + (i + 1) * width_step  # Width increases with class
+            ranges.append((lower, upper, width))
+        
+        return ranges
     
     def _create_arc_geometry(self, start_pos, end_pos, curvature):
         """Create a curved arc geometry between two points using Bezier curve approximation.
@@ -782,16 +827,16 @@ class DCascadePlugin:
         self.connectivity_enabled = enabled
         
         if enabled:
+            # Recalculate width ranges when enabling
+            self.connectivity_width_ranges = None
             # Show connectivity layer and update it
             if self.connectivity_layer:
-                self.connectivity_layer.setOpacity(1.0)
+                self.connectivity_layer.setVisible(True)
             self.update_connectivity_curves(self.current_time_step)
         else:
             # Hide connectivity layer
             if self.connectivity_layer:
-                prov = self.connectivity_layer.dataProvider()
-                prov.truncate()
-                self.connectivity_layer.triggerRepaint()
+                self.connectivity_layer.setVisible(False)
         
         self.canvas.refresh()
     

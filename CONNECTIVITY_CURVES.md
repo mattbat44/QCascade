@@ -10,7 +10,8 @@ This implementation adds animated connectivity curves to the D-CASCADE QGIS plug
 - **Animated Arc Display**: Shows curved arrows between reaches representing sediment transport
 - **Time-Step Synchronization**: Updates automatically when the animation time slider changes
 - **Direct Connectivity Data**: Uses the "Direct connectivity [m^3]" field from simulation results
-- **Logarithmic Color Scale**: Colors arcs based on sediment volume using a log scale for better visualization
+- **Width-Based Scale**: Line width represents sediment volume using logarithmic width classes
+- **Consistent Width Classes**: Width classes calculated globally from all timesteps for animation consistency
 - **Outlet Connections**: Handles sediment flowing to the outlet with different arc curvature
 
 ### Implementation Details
@@ -27,8 +28,9 @@ This implementation adds animated connectivity curves to the D-CASCADE QGIS plug
 Main method that updates the connectivity layer for a given time step:
 1. Extracts "Direct connectivity [m^3]" data from results
 2. Creates curved line geometries between reach centroids
-3. Applies graduated symbology based on sediment volume
-4. Uses logarithmic color scale for better visualization
+3. Applies graduated width symbology based on sediment volume
+4. Uses logarithmic width classes calculated globally across all timesteps for consistency
+5. Uses a single consistent color for all arcs
 
 **Data Structure:**
 - `transport_data`: Shape (num_reaches, num_reaches) - sediment between reaches
@@ -54,6 +56,17 @@ Where:
 - P₁ = control point (offset perpendicular to line)
 - P₂ = end point
 - t = parameter from 0 to 1
+
+##### `_calculate_global_width_ranges()`
+Calculates consistent width ranges from all timesteps:
+1. Extracts all non-zero volumes from entire dataset
+2. Computes logarithmic class boundaries (5 classes by default)
+3. Assigns linearly increasing widths to each class (0.3mm to 3.0mm)
+4. Returns list of (lower, upper, width) tuples
+5. Called once when connectivity is enabled and cached for the animation
+
+This ensures that width classes remain consistent throughout the animation,
+making it easier to compare sediment transport between different timesteps.
 
 ##### `toggle_connectivity_curves(enabled)`
 Enables or disables connectivity curve display:
@@ -124,7 +137,8 @@ The implementation requires the following data in simulation results:
 2. Go to the Animation tab
 3. Check "Show connectivity curves"
 4. Use the time slider to see connectivity change over time
-5. Adjust color ramp and line width to customize appearance
+5. Width classes are automatically calculated from all timesteps for consistency
+6. Thicker lines represent larger sediment volumes
 
 ### For Developers
 
@@ -139,10 +153,13 @@ To extend the connectivity visualization:
 
 #### Key Design Decisions
 
-1. **Logarithmic Scale**: Used because sediment volumes span several orders of magnitude
-2. **Bezier Curves**: Provide smooth, visually appealing arcs
-3. **Memory Layer**: Recreated each timestep for simplicity and correctness
-4. **Graduated Renderer**: Provides clear visual differentiation of volumes
+1. **Width-Based Visualization**: Line width represents volume instead of color for clearer comparison
+2. **Consistent Width Classes**: Classes calculated globally from all timesteps for animation consistency
+3. **Logarithmic Scale**: Used because sediment volumes span several orders of magnitude
+4. **Single Color Scheme**: Uses consistent blue color to avoid color-based confusion
+5. **Bezier Curves**: Provide smooth, visually appealing arcs
+6. **Memory Layer**: Recreated each timestep for simplicity and correctness
+7. **Graduated Renderer**: Provides clear visual differentiation of volumes
 
 ## Performance Considerations
 
@@ -158,8 +175,9 @@ To extend the connectivity visualization:
 - [ ] Connectivity curves appear when checkbox is enabled
 - [ ] Curves disappear when checkbox is disabled
 - [ ] Curves update when time slider moves
-- [ ] Color scale matches selected color ramp
-- [ ] Line width changes with width spinner
+- [ ] Width classes remain consistent throughout animation
+- [ ] Thicker lines represent larger volumes
+- [ ] All curves use consistent blue color
 - [ ] Arcs point from upstream to downstream
 - [ ] Outlet connections use different curvature
 - [ ] Layer appears above animation layer in layer tree
@@ -170,7 +188,8 @@ To extend the connectivity visualization:
 See `qgis_plugin/unit_tests/test_connectivity_curves.py` for logic validation tests:
 - Bezier curve generation
 - Direct connectivity data extraction
-- Logarithmic color scale binning
+- Logarithmic width scale binning
+- Global width range calculation
 
 ## References
 
