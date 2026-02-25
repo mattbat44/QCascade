@@ -468,10 +468,14 @@ class ResultsViewerDock(QDockWidget):
                             
                             # Try to get psi from results if available
                             psi_labels = [f"Class {i+1}" for i in range(num_classes)]
+                            psi = None
                             if 'psi' in self.results_data:
                                 psi = self.results_data['psi']
-                                if len(psi) == num_classes:
-                                    psi_labels = [f"Psi {p:.1f}" for p in psi]
+                            elif 'Simulation parameters' in self.results_data and 'psi' in self.results_data['Simulation parameters']:
+                                psi = self.results_data['Simulation parameters']['psi']
+                                
+                            if psi is not None and len(psi) == num_classes:
+                                psi_labels = [f"Psi {p:.1f}" for p in psi]
 
                             for i in range(num_classes):
                                 y_data.append(data_ext[:, reach_idx, i])
