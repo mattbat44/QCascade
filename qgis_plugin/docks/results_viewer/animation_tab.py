@@ -6,7 +6,7 @@
 from qgis.PyQt.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QComboBox, QDoubleSpinBox, QSpinBox,
-    QLabel, QSlider
+    QLabel, QSlider, QCheckBox, QGroupBox
 )
 from qgis.PyQt.QtCore import Qt
 
@@ -80,5 +80,17 @@ class AnimationTab(QWidget):
         self.frame_duration_spin.setValue(200)
         duration_control_layout.addWidget(self.frame_duration_spin)
         layout.addLayout(duration_control_layout)
+
+        # Connectivity curves controls
+        connectivity_group = QGroupBox("Connectivity Curves")
+        connectivity_layout = QVBoxLayout()
+        
+        self.connectivity_check = QCheckBox("Show connectivity curves")
+        self.connectivity_check.setChecked(False)
+        self.connectivity_check.setToolTip("Display animated arcs showing sediment transport between reaches")
+        connectivity_layout.addWidget(self.connectivity_check)
+        
+        connectivity_group.setLayout(connectivity_layout)
+        layout.addWidget(connectivity_group)
 
         layout.addStretch()

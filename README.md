@@ -1,121 +1,136 @@
-# dcascade-py
+# D-CASCADE QGIS Plugin
 
-D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a modelling framework for sediment transport and connectivity analysis in large river networks (Tangi et al. (2022), Doolaeghe et al. (in prep)).
-It is the dynamic version of the CASCADE framework (Schmitt et al. (2016)).
-A new release (v2.0.0) was recently created (Doolaeghe et al. (in prep)).
+QGIS plugin version of the D-CASCADE sediment transport modeling framework.
 
-This repository contains:
-- all the core function necessary to run the model (src folder).
-- one example of user script (user_scripts folder), that can be runned to test the model installation.
-- examples of inputs to the model (inputs folder)
-- examples of python script to post-process and analyse the results
+## Installation
 
-The model is written in python.
+### Development Installation (Recommended)
 
-Developers: Diane Doolaeghe, Anne-Laure Argentin, Elisa Bozzolan, Felix Pitscheider
+For development and testing, use the provided PowerShell script to create a symlink:
 
+1. **Create QGIS Profile** (if not already created):
+   - Open QGIS
+   - Go to **Settings → User Profiles → New Profile**
+   - Name it `dcascade-testing`
 
-# Installation
+2. **Run Installation Script**:
+   ```powershell
+   .\install_plugin_dev.ps1
+   ```
+   
+   This creates a junction link from the QGIS plugins directory to your development directory, allowing code changes to be immediately available.
 
-## Downloading the code
+3. **Open QGIS with the profile**:
+   - Start QGIS and select the `dcascade-testing` profile
+   - Or use: `qgis --profile dcascade-testing`
 
-On repository page, find the Release section and click on v2.0.0. Then click on "Source code (zip)". This normally starts downloading your project, that should be placed in your download folder.
-Copy-paste the project somewhere convenient on your computer.
+4. **Enable the plugin**:
+   - Go to **Plugins → Manage and Install Plugins**
+   - Search for "D-CASCADE"
+   - Check the box to enable it
 
-## Instructions for installing the conda environment
+5. **For rapid development**:
+   - Install the "Plugin Reloader" plugin (optional but recommended)
+   - After code changes, use **Plugins → Plugin Reloader → Reload Plugin** to reload without restarting QGIS
 
-To respect the requirements of D-CASCADE (i.e. correct python and packages versions), we propose you to install a conda environment to run D-CASCADE on your computer.
-This environment is stored in the file "environment.yml", which is inside the D-CASCADE repository.
+### Production Installation
 
-To install this environment, you will need to have Anaconda or Miniconda installed on your computer. If not, please install [Anaconda](https://docs.anaconda.com/free/anaconda/install/index.html), for your operating system.
-Note: Anaconda distributes the Python language (so you do not have to download it separately) and automatically manages the python libraries upgrades and dependencies according to your operating system (Windows, Linux etc.). It also allows you to install all the libraries in a virtual environment to avoid any potential damage to your computer.
-Creating a virtual environment requires the [Conda](https://conda.io/projects/conda/en/latest/index.html) package manager, which normally comes installed within Anaconda.
+1. Copy the `qgis_plugin` directory to your QGIS plugins folder:
+   - Windows: `C:\Users\<username>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\`
+   - Linux: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
+   - macOS: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
 
-Once Anaconda is installed on your computer, you can look for "Anaconda Prompt" on the start menu.
-Right click on it and open it as an administrator.
-Then, navigate to the path where your environment.yml file is stored, which is where you have installed your D-CASCADE project on your computer:
+2. Rename the directory from `qgis_plugin` to `dcascade`
 
-```console
-cd name_of_the_path
-```
+3. Restart QGIS
 
-To check whether the "environment.yml" file is in there you can type: `dir` and it should appear.
+4. Enable the plugin:
+   - Go to **Plugins → Manage and Install Plugins**
+   - Search for "D-CASCADE"
+   - Check the box to enable it
 
-Then, create the environment (called here "dcascade") with the required python version and packages. This may take a few minuts. 
+5. Access the plugin:
+   - Click the D-CASCADE toolbar icon, or
+   - Go to **Plugins → D-CASCADE**
 
-```console
-conda env create -f environment.yml -n dcascade
-```
+## Usage
 
-And activate it:
+### Setup
 
-```console
-conda activate dcascade
-```
+1. **Load Network Layer**: 
+   - Load your river network shapefile into QGIS as a vector layer
+   - Ensure it has required fields: `FromN`, `ToN`, `Length`, `Slope`, `W`, `D50`, `D90`
+   - Select the layer in the **Parameters** dock (right side) using the layer dropdown
 
-If the environment installation from the "environment.yml" file does not work, or is anormally to long, try these lines one after the other: 
+2. **Configure Parameters**:
+   - Use the tabs in the Parameters dock to set:
+     - **Inputs**: Layer selection, discharge CSV, output settings
+     - **Physics**: Transport formulas, flow depth, velocity calculations
+     - **Sediment**: Grain size range, number of classes, layer thicknesses
+     - **Time**: Number of time steps and step length
+     - **Options**: Output saving options
+     - **External Inputs**: Add CSV files for per-reach external sediment inputs
 
-```console
-conda env create -n dcascade python=3.12.3
-conda activate dcascade
-```
+3. **Run Simulation**:
+   - Click **Run Simulation** button
+   - Monitor progress in QGIS message log
+   - Results will be automatically loaded when complete
 
-```console
-conda install spyder
-conda install numpy
-conda install tqdm
-conda install matplotlib
-conda install pandas=2.3.1
-conda install networkx=3.5
-conda install -c conda-forge geopandas=1.1.1
-conda install -c conda-forge shapely=2.0.5
-```
+### Viewing Results
 
+1. **Results Viewer** (bottom dock):
+   - **Time Series**: Graph variables over time for selected or all reaches
+   - **Spatial Analysis**: View aggregated results along reaches
+   - **Dynamic Viewer**: Animate through time steps
+   - **Statistics**: Summary statistics for all variables
 
-Now you can call spyder, or open it directly from your start menu (spyder(dcascade)).
-```console
-spyder
-```
-Spyder is an interpreter where you can visualise and run the python scripts of D-CASCADE
+2. **Map Interaction**:
+   - Select a reach in the map canvas to graph it in the results viewer
+   - Use the time slider in Dynamic Viewer to animate layer symbology
+   - Layer colors update based on selected variable and time step
 
+3. **External Inputs**:
+   - Select a reach in the map
+   - Go to **External Inputs** tab in Parameters dock
+   - Click "Add External Input CSV" to attach CSV files to the selected reach
 
-## First D-CASCADE run
+## Requirements
 
-To check if the installation went well, you can use the example, that is available on the repository (using one small river network of the Vjosa river).
-Open the user script example, available at "user_scripts\00-DCASCADE_user_script_example_Vjosa.py", in Spyder (you can drag it into Spyder). And run it.
-You should see a time bar progressing quickly in the Spyder console.
+- QGIS 3.0 or later
+- Python packages (should be available in QGIS Python environment):
+  - numpy
+  - pandas
+  - geopandas
+  - matplotlib
+  - scipy
+  - shapely
+  - networkx
 
-Once done, the simulation should create a folder "cascade_results" in your project, and produce two outputs files (Vjosa_test.json and Vjosa_test_ext.json).
-These are JSON files containing all outputs of the model.
+## Architecture
 
-## First checking of outputs
+- **Main Plugin Class** (`dcascade_plugin.py`): Integrates with QGIS, manages docks and interactions
+- **Parameters Dock** (`docks/parameters_dock.py`): Configuration interface with tabs
+- **Results Viewer Dock** (`docks/results_viewer_dock.py`): Visualization with matplotlib
+- **Core Module** (`core/`): Configuration management and simulation runner
 
-In the folder "post_process_examples", there is a list of python script, that are examples on how to post-process the results, and make graphs:
+## Troubleshooting
 
-- scripts that show how to analyse each reach sediment transport along time (total, per grain size, and by initial provenance, (01, 02, 03))
+### Plugin not appearing in QGIS
+- Check that the plugin directory is in the correct location
+- Ensure `__init__.py` and `metadata.txt` are present
+- Check QGIS Python console for error messages
 
-- scripts that show how to analyse yearly sediment transport along the river network (total yearly sum, per grain size, and by initial provenance, (04, 05, 06))
+### Layer validation fails
+- Ensure your vector layer has required fields: `FromN`, `ToN`, `Length`, `Slope`
+- Check field names match exactly (case-sensitive)
 
-- a script to create a dynamic map of the outputs (07)
+### Simulation fails
+- Check that discharge CSV file path is correct
+- Verify layer has valid geometry
+- Check QGIS message log for detailed error messages
 
-- a script to analyse connectivity and sediment path-length per time step (08)
+### Symbology animation not working
+- Ensure results are loaded in Results Viewer
+- Select a variable in Dynamic Viewer tab
+- Move the time slider to see updates
 
-You can run them and check the type of plot they generate for the example case. 
-
-
-## Making your own project
-
-You can modify the user_script example (00-DCASCADE_user_script_example_Vjosa.py) to correspond to your own project.
-
-Inputs to the model (reachdata and discharge) are generated externally. Examples are provided in the folder "inputs", and instruction for generating them are available at: TODO.
-In your user script, modify the path to point at your input location.
-
-Modify also the output name to store your own outputs in the "cascade_results" folder.
-
-You can modify the simulation parameters to correspond to your river network, and then run your case study. 
-
-Modify also the paths in the post-process example scripts, so that they coincide with your output file name in the "dcascade_result" folder. 
-
-
-# Documentation of D-CASCADE code functions
-https://dcascade-py.github.io/dcascade-py-doc/index.html
