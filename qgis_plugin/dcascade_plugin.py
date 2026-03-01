@@ -100,7 +100,7 @@ class DCascadePlugin:
         self.parameters_dock.load_run_requested.connect(self.on_load_run_requested)
         
         self.results_viewer_dock.time_step_changed.connect(self.on_time_step_changed)
-        self.results_viewer_dock.reach_selected_for_graph.connect(self.graph_reach)
+        #self.results_viewer_dock.reach_selected_for_graph.connect(self.graph_reach)
         self.results_viewer_dock.results_loaded.connect(self.on_results_loaded)
         self.results_viewer_dock.animation_settings_changed.connect(lambda: self.on_time_step_changed(self.current_time_step))
         self.results_viewer_dock.connectivity_check.stateChanged.connect(self.on_connectivity_toggled)

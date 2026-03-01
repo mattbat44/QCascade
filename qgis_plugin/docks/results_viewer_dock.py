@@ -162,7 +162,7 @@ class ResultsViewerDock(QDockWidget):
         self.animation_tab.play_btn.clicked.connect(self.animate_results)
         self.animation_tab.frame_duration_spin.valueChanged.connect(self._on_animation_setting_changed)
         
-        self.stats_tab.refresh_btn.clicked.connect(self.update_statistics)
+        # self.stats_tab.refresh_btn is already connected in its own init_ui
         
         # Expose commonly accessed widgets for backward compatibility
         self.ts_variable_combo = self.time_series_tab.ts_variable_combo
@@ -411,6 +411,16 @@ class ResultsViewerDock(QDockWidget):
             self.time_slider.setEnabled(True)
             self.time_label.setText(f"0 / {num_timesteps - 1}")
             self.play_btn.setEnabled(True)
+        
+        # Populate statistics variable list
+        if hasattr(self, 'stats_tab'):
+            self.stats_tab.var_combo.clear()
+            all_vars = []
+            if self.results_data:
+                all_vars.extend(sorted([k for k, v in self.results_data.items() if isinstance(v, np.ndarray)]))
+            if self.results_data_ext:
+                all_vars.extend(sorted([k for k, v in self.results_data_ext.items() if isinstance(v, np.ndarray)]))
+            self.stats_tab.var_combo.addItems(all_vars)
         
         # Generate initial plot
         self.update_time_series_plot()
@@ -944,32 +954,6 @@ class ResultsViewerDock(QDockWidget):
             self.time_slider.setValue(0)
         else:
             self.time_slider.setValue(current + 1)
-    
-    def update_statistics(self):
-        """Update statistics view."""
-        if self.results_data is None:
-            self.stats_label.setText("No results loaded.")
-            return
-        
-        try:
-            stats_text = "<h3>Results Summary</h3><table border='1'><tr><th>Variable</th><th>Shape</th><th>Mean</th><th>Std</th><th>Min</th><th>Max</th></tr>"
-            
-            for var_name, var_data in self.results_data.items():
-                if isinstance(var_data, np.ndarray) and var_data.ndim == 2:
-                    stats_text += f"<tr>"
-                    stats_text += f"<td>{var_name}</td>"
-                    stats_text += f"<td>{var_data.shape}</td>"
-                    stats_text += f"<td>{np.mean(var_data):.4f}</td>"
-                    stats_text += f"<td>{np.std(var_data):.4f}</td>"
-                    stats_text += f"<td>{np.min(var_data):.4f}</td>"
-                    stats_text += f"<td>{np.max(var_data):.4f}</td>"
-                    stats_text += f"</tr>"
-            
-            stats_text += "</table>"
-            self.stats_label.setText(stats_text)
-            
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to generate statistics: {str(e)}")
     
     def graph_selected_reach(self, from_n_value):
         """Graph a specific reach (called externally when reach is selected).
