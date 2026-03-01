@@ -298,7 +298,7 @@ class DCascadePlugin:
             self.selected_reach_id = None
             self.parameters_dock.set_selected_reach(None)
             if self.results_viewer_dock:
-                self.results_viewer_dock.graph_selected_reach(None)
+                #self.results_viewer_dock.graph_selected_reach(None)
             return
 
         from_n_idx = self.network_layer.fields().indexFromName('FromN')
