@@ -163,6 +163,9 @@ class ResultsViewerDock(QDockWidget):
         self.animation_tab.time_slider.valueChanged.connect(self.on_time_slider_changed)
         self.animation_tab.play_btn.clicked.connect(self.animate_results)
         self.animation_tab.frame_duration_spin.valueChanged.connect(self._on_animation_setting_changed)
+
+        # Refresh the appropriate plot whenever the user switches tabs
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
         
         # Expose commonly accessed widgets for backward compatibility
         self.ts_variable_combo = self.time_series_tab.ts_variable_combo
@@ -192,6 +195,22 @@ class ResultsViewerDock(QDockWidget):
     def current_tab_name(self):
         """Get the name of the currently active tab."""
         return self.tab_widget.tabText(self.tab_widget.currentIndex())
+
+    def _on_tab_changed(self, index):
+        """Refresh the plot for the newly activated tab."""
+        if self.results_data is None:
+            return
+        tab = self.tab_widget.tabText(index)
+        if tab == "Time Series":
+            self.update_time_series_plot()
+        elif tab == "Animation":
+            self.update_dynamic_plot()
+        elif tab == "Spatial Analysis":
+            self.update_spatial_plot()
+        elif tab == "Connectivity":
+            self.update_connectivity_plot()
+        elif tab == "Long Profile":
+            self.update_long_profile_plot(use_slider=True)
 
     def show_plot_dock(self):
         """Explicitly show the plot dock (used when user opens Results)."""
@@ -775,18 +794,20 @@ class ResultsViewerDock(QDockWidget):
             reach_labels = [f"R{self.reach_ids[i]}" if i < len(self.reach_ids) else f"R{i+1}" for i in range(data.shape[1])]
             values = data[time_step, :]
 
-            # If selection exists, show only selected reaches
+            # Highlight selected reaches without hiding the rest
+            sel_indices = set()
             if self.selected_reaches:
-                sel_indices = []
                 for rid in self.selected_reaches:
                     if rid in self.reach_id_map:
                         idx = self.reach_id_map[rid]
                         if 0 <= idx < len(values):
-                            sel_indices.append(idx)
-                reach_labels = [reach_labels[i] for i in sel_indices]
-                values = values[sel_indices]
+                            sel_indices.add(idx)
 
-            ax.bar(reach_labels, values)
+            colors = [
+                "#e05c2a" if i in sel_indices else "#4d9de0"
+                for i in range(len(values))
+            ]
+            ax.bar(reach_labels, values, color=colors)
             
             ax.set_title(f"{variable} - Time Step {time_step}")
             ax.set_xlabel("Reach Index")
@@ -1060,16 +1081,13 @@ class ResultsViewerDock(QDockWidget):
         
         Args:
             from_n_value: The FromN attribute value of the selected reach
-            from_map: Whether the selection came from the map; if so, only refresh if on Time Series tab
+            from_map: Whether the selection came from the map; if so, only refresh
+                      the currently active tab without switching away from it.
         """
         if self.results_data is None:
             return
 
-        # If from map, only update if on the Time Series tab
-        if from_map and self.current_tab_name() != "Time Series":
-            return
-
-        # Allow multiple selections
+        # Always store the selection so every tab can use it
         if from_n_value is None:
             self.selected_reaches = []
         elif isinstance(from_n_value, (list, tuple)):
@@ -1077,9 +1095,18 @@ class ResultsViewerDock(QDockWidget):
         else:
             self.selected_reaches = [str(from_n_value)]
 
-        # Switch to time series tab and refresh
-        self.tab_widget.setCurrentIndex(0)
-        self.update_time_series_plot()
+        if from_map:
+            # Refresh whichever tab is currently visible without forcing a switch
+            tab = self.current_tab_name()
+            if tab == "Time Series":
+                self.update_time_series_plot()
+            elif tab == "Animation":
+                self.update_dynamic_plot()
+            # Other tabs don't use selected_reaches, so no refresh needed
+        else:
+            # Programmatic selection: switch to Time Series and refresh
+            self.tab_widget.setCurrentIndex(0)
+            self.update_time_series_plot()
 
     def setVisible(self, visible):
         """Keep plot dock visibility in sync with the control dock."""

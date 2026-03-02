@@ -290,11 +290,36 @@ class DCascadePlugin:
         )
     
     def on_map_selection_changed(self):
-        """Handle map canvas feature selection change."""
+        """Handle map canvas feature selection change.
+
+        Responds to selections on either the animated layer or the original
+        network layer, whichever is currently active / has selected features.
+        """
         if self.network_layer is None:
             return
-        
-        selected_features = self.network_layer.selectedFeatures()
+
+        # Prefer the animation layer when it has an active selection so that
+        # users can select reaches directly on the animated layer and still
+        # drive the plots.
+        selected_features = []
+        active_layer = None
+
+        try:
+            if (self.animation_layer is not None
+                    and self.animation_layer.isValid()
+                    and self.animation_layer.selectedFeatureCount() > 0):
+                selected_features = self.animation_layer.selectedFeatures()
+                active_layer = self.animation_layer
+        except RuntimeError:
+            # Underlying C++ object has been deleted; clean up reference
+            self.animation_layer = None
+
+        # Fall back to the original network layer
+        if not selected_features:
+            if self.network_layer.selectedFeatureCount() > 0:
+                selected_features = self.network_layer.selectedFeatures()
+                active_layer = self.network_layer
+
         if not selected_features:
             self.selected_reach_id = None
             self.parameters_dock.set_selected_reach(None)
@@ -303,7 +328,7 @@ class DCascadePlugin:
                 #self.results_viewer_dock.graph_selected_reach(None)
             return
 
-        from_n_idx = self.network_layer.fields().indexFromName('FromN')
+        from_n_idx = active_layer.fields().indexFromName('FromN')
         if from_n_idx < 0:
             return
 
@@ -318,8 +343,8 @@ class DCascadePlugin:
         if self.results_viewer_dock and self.results_viewer_dock.results_data is not None:
             # results viewer handles tab check via from_map=True
             self.results_viewer_dock.graph_selected_reach(reach_ids, from_map=True)
-            
-            print(f"Selected reach(s) with FromN: {reach_ids}")
+
+            print(f"Selected reach(s) with FromN: {reach_ids} (via {'animation' if active_layer is self.animation_layer else 'network'} layer)")
 
 
 
