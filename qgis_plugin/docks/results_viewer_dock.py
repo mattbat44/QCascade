@@ -39,6 +39,7 @@ class ResultsViewerDock(QDockWidget):
     reach_selected_for_graph = pyqtSignal(int)  # Emitted when user wants to graph a reach
     results_loaded = pyqtSignal()  # Emitted when results are successfully loaded
     animation_settings_changed = pyqtSignal()  # Emitted when ramp/width/variable changes
+    pane_state_changed = pyqtSignal(str, dict)  # Emitted with (pane_name, state_dict)
     
     def __init__(self, parent=None):
         super().__init__("Results Viewer", parent)
@@ -148,7 +149,8 @@ class ResultsViewerDock(QDockWidget):
         self.spatial_tab.spatial_year_spin.valueChanged.connect(self.update_spatial_plot)
         self.spatial_tab.spatial_yearly_check.stateChanged.connect(self.update_spatial_plot)
         self.spatial_tab.plot_btn.clicked.connect(self.update_spatial_plot)
-        
+
+        # Connect signals from other tabs
         self.connectivity_tab.conn_variable_combo.currentTextChanged.connect(self.update_connectivity_plot)
         self.connectivity_tab.plot_btn.clicked.connect(self.update_connectivity_plot)
         
@@ -161,8 +163,6 @@ class ResultsViewerDock(QDockWidget):
         self.animation_tab.time_slider.valueChanged.connect(self.on_time_slider_changed)
         self.animation_tab.play_btn.clicked.connect(self.animate_results)
         self.animation_tab.frame_duration_spin.valueChanged.connect(self._on_animation_setting_changed)
-        
-        self.stats_tab.refresh_btn.clicked.connect(self.update_statistics)
         
         # Expose commonly accessed widgets for backward compatibility
         self.ts_variable_combo = self.time_series_tab.ts_variable_combo
@@ -188,47 +188,53 @@ class ResultsViewerDock(QDockWidget):
         self.stats_label = self.stats_tab.stats_label
 
         self.show_empty_plot()
-    
-    
-    def on_time_slider_changed_wrapper(self, _):
-        """Wrapper to handle variable change for animation."""
-        self.on_time_slider_changed(self.time_slider.value())
-    
-    def _on_animation_setting_changed(self, *_):
-        """Emit setting change and refresh current timestep."""
-        self.animation_settings_changed.emit()
-        self.on_time_slider_changed(self.time_slider.value())
-    
+
+    def current_tab_name(self):
+        """Get the name of the currently active tab."""
+        return self.tab_widget.tabText(self.tab_widget.currentIndex())
+
+    def show_plot_dock(self):
+        """Explicitly show the plot dock (used when user opens Results)."""
+        if self.canvas_dock:
+            if self.results_data is None:
+                self.show_empty_plot()
+            self.canvas_dock.show()
+
     def show_empty_plot(self):
-        """Show empty plot message."""
+        """Show empty plot message when no results are loaded."""
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        ax.text(0.5, 0.5, 'Load simulation results to visualize', 
-                horizontalalignment='center', verticalalignment='center',
-                transform=ax.transAxes, fontsize=16)
+        ax.text(
+            0.5,
+            0.5,
+            "Load simulation results to visualize",
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=ax.transAxes,
+            fontsize=16,
+        )
         ax.set_xticks([])
         ax.set_yticks([])
         self._apply_plot_margins()
         self.canvas.draw()
         if self.canvas_dock:
             self.canvas_dock.hide()
-    
-    def on_time_slider_changed(self, value):
-        """Handle time slider change."""
-        self.time_step_changed.emit(value)
-        self.update_dynamic_plot()
-    
+
     def _load_with_fallback(self, file_path):
-        """Helper to load file with fallback to pickle for legacy files."""
+        """Load results, falling back to legacy pickle if needed.
+
+        Also offers optional conversion of legacy pickle files to JSON.
+        """
         try:
             return load_from_json(file_path)
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except Exception:
             # Try legacy pickle load
             try:
                 import pickle
-                with open(file_path, 'rb') as f:
+
+                with open(file_path, "rb") as f:
                     data = pickle.load(f)
-                
+
                 # Ask user to convert
                 reply = QMessageBox.question(
                     self,
@@ -236,110 +242,119 @@ class ResultsViewerDock(QDockWidget):
                     f"The file '{Path(file_path).name}' appears to be in a legacy binary format (pickle).\n\n"
                     "Would you like to convert it to the new JSON format for better compatibility?",
                     QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
+                    QMessageBox.Yes,
                 )
-                
+
                 if reply == QMessageBox.Yes:
                     try:
-                        # Determine new path
                         p = Path(file_path)
-                        if p.suffix == '.json':
-                            new_path = p 
+                        if p.suffix == ".json":
+                            new_path = p
                         else:
-                            new_path = p.with_suffix('.json')
-                            
+                            new_path = p.with_suffix(".json")
+
                         save_to_json(data, new_path)
-                        QMessageBox.information(self, "Success", f"Converted and saved to:\n{new_path}")
+                        QMessageBox.information(
+                            self,
+                            "Success",
+                            f"Converted and saved to:\n{new_path}",
+                        )
                     except Exception as save_err:
-                        QMessageBox.warning(self, "Conversion Failed", f"Could not save JSON: {save_err}")
-                
+                        QMessageBox.warning(
+                            self,
+                            "Conversion Failed",
+                            f"Could not save JSON: {save_err}",
+                        )
+
                 return data
             except Exception:
+                # Re-raise so caller can handle
                 raise
 
     def load_results(self):
-        """Load results from JSON file."""
+        """Load results from a JSON file chosen by the user."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Results File",
             "",
-            "JSON Files (*.json);;All Files (*)"
+            "JSON Files (*.json);;All Files (*)",
         )
-        
+
         if not file_path:
             return
-        
+
         try:
             self.results_data = self._load_with_fallback(file_path)
-            
+
             # Try to load extended results
             p = Path(file_path)
             ext_candidates = [
-                p.with_name(p.stem + '_ext.json'),
-                p.with_name(p.stem + '_ext.p')
+                p.with_name(p.stem + "_ext.json"),
+                p.with_name(p.stem + "_ext.p"),
             ]
-            
+
             self.results_data_ext = None
             for ext_path in ext_candidates:
                 if ext_path.exists():
                     try:
-                        self.results_data_ext = self._load_with_fallback(ext_path)
+                        self.results_data_ext = self._load_with_fallback(str(ext_path))
                         break
                     except Exception:
                         continue
 
             self.results_path = file_path
-            
-            # Update UI
+
+            # Update UI and notify listeners
             self.update_ui_with_results()
-            
-            msg = f"Loaded results from {Path(file_path).name}\nAvailable variables: {len(self.results_data)} fields"
+
+            msg = (
+                f"Loaded results from {Path(file_path).name}\n"
+                f"Available variables: {len(self.results_data)} fields"
+            )
             if self.results_data_ext:
                 msg += "\nExtended results loaded."
-            
-            QgsMessageLog.logMessage(
-                self,
-                "Success",
-                msg,
-                "D-CASCADE",
-                Qgis.Info
-            )
-            
+
+            QgsMessageLog.logMessage(msg, "D-CASCADE", Qgis.Info)
+            self.results_loaded.emit()
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load results: {str(e)}")
-    
+
     def load_results_from_path(self, path):
         """Load results from a specific path (called externally)."""
-        if Path(path).exists():
-            self.results_path = path
-            try:
-                self.results_data = self._load_with_fallback(path)
-                
-                # Try to load extended results
-                p = Path(path)
-                ext_candidates = [
-                    p.with_name(p.stem + '_ext.json'),
-                    p.with_name(p.stem + '_ext.p')
-                ]
-                
-                self.results_data_ext = None
-                for ext_path in ext_candidates:
-                    if ext_path.exists():
-                        try:
-                            self.results_data_ext = self._load_with_fallback(ext_path)
-                            break
-                        except Exception:
-                            continue
+        p = Path(path)
+        if not p.exists():
+            return
 
-                self.update_ui_with_results()
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Could not load results: {str(e)}")
-    
+        try:
+            self.results_data = self._load_with_fallback(str(p))
+
+            # Try to load extended results
+            ext_candidates = [
+                p.with_name(p.stem + "_ext.json"),
+                p.with_name(p.stem + "_ext.p"),
+            ]
+
+            self.results_data_ext = None
+            for ext_path in ext_candidates:
+                if ext_path.exists():
+                    try:
+                        self.results_data_ext = self._load_with_fallback(str(ext_path))
+                        break
+                    except Exception:
+                        continue
+
+            self.results_path = str(p)
+            self.update_ui_with_results()
+            self.results_loaded.emit()
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not load results: {str(e)}")
+
     def update_ui_with_results(self):
-        """Update UI with loaded results."""
+        """Update controls and cached metadata after loading results."""
         if self.results_data is None:
             return
-        
+
         # Update info label
         available_vars = list(self.results_data.keys())
         self.info_label.setText(
@@ -352,81 +367,103 @@ class ResultsViewerDock(QDockWidget):
         for name, arr in self.results_data.items():
             if isinstance(arr, np.ndarray) and arr.size > 0:
                 self.data_ranges[name] = (np.nanmin(arr), np.nanmax(arr))
-        
+
         # Build reach ID map
         self.reach_ids = []
         self.reach_id_map = {}
-        
-        if 'reach_id' in self.results_data:
-            # Use provided IDs
-            r_ids = self.results_data['reach_id']
-            # Handle if it's a list or array
+
+        if "reach_id" in self.results_data:
+            r_ids = self.results_data["reach_id"]
             if isinstance(r_ids, np.ndarray):
                 r_ids = r_ids.tolist()
-            
             self.reach_ids = [str(x) for x in r_ids]
             self.reach_id_map = {str(x): i for i, x in enumerate(r_ids)}
         else:
-            # Try to infer from network layer if available
             inferred = False
             if self.network_layer:
                 try:
-                    from_n_idx = self.network_layer.fields().indexFromName('FromN')
-                    if from_n_idx >= 0:
+                    from_n_idx = self.network_layer.fields().indexFromName("FromN")
+                    if from_n_idx >= 0 and "Volume out [m^3]" in self.results_data:
                         from_ns = []
                         for f in self.network_layer.getFeatures():
                             val = f.attribute(from_n_idx)
                             if val is not None:
                                 from_ns.append(int(val))
-                        
-                        # Sort to match simulation order (D-CASCADE sorts by FromN)
                         sorted_ids = sorted(from_ns)
-                        
-                        # Verify length matches data
-                        if 'Volume out [m^3]' in self.results_data:
-                             if len(sorted_ids) == self.results_data['Volume out [m^3]'].shape[1]:
-                                self.reach_ids = [str(x) for x in sorted_ids]
-                                self.reach_id_map = {str(x): i for i, x in enumerate(sorted_ids)}
-                                inferred = True
-                                QgsMessageLog.logMessage("Inferred reach IDs from network layer.", "D-CASCADE", Qgis.Info)
+                        if len(sorted_ids) == self.results_data["Volume out [m^3]"].shape[1]:
+                            self.reach_ids = [str(x) for x in sorted_ids]
+                            self.reach_id_map = {
+                                str(x): i for i, x in enumerate(sorted_ids)
+                            }
+                            inferred = True
+                            QgsMessageLog.logMessage(
+                                "Inferred reach IDs from network layer.",
+                                "D-CASCADE",
+                                Qgis.Info,
+                            )
                 except Exception as e:
-                    QgsMessageLog.logMessage(f"Could not infer IDs: {e}", "D-CASCADE", Qgis.Warning)
-            
-            if not inferred and 'Volume out [m^3]' in self.results_data:
-                # Fallback: 1-based index
-                num_reaches = self.results_data['Volume out [m^3]'].shape[1]
-                self.reach_ids = [str(i+1) for i in range(num_reaches)]
-                self.reach_id_map = {str(i+1): i for i in range(num_reaches)}
+                    QgsMessageLog.logMessage(
+                        f"Could not infer IDs: {e}", "D-CASCADE", Qgis.Warning
+                    )
 
-        # Update reach selector for time series
-        if 'Volume out [m^3]' in self.results_data:
+            if not inferred and "Volume out [m^3]" in self.results_data:
+                num_reaches = self.results_data["Volume out [m^3]"].shape[1]
+                self.reach_ids = [str(i + 1) for i in range(num_reaches)]
+                self.reach_id_map = {str(i + 1): i for i in range(num_reaches)}
+
+        # Update reach selector and time slider for time series
+        if "Volume out [m^3]" in self.results_data:
             self.ts_reach_combo.clear()
             for rid in self.reach_ids:
                 self.ts_reach_combo.addItem(f"Reach {rid}")
             self.ts_reach_combo.setEnabled(True)
-            
-            # Update time slider
-            num_timesteps = self.results_data['Volume out [m^3]'].shape[0]
+
+            num_timesteps = self.results_data["Volume out [m^3]"].shape[0]
             self.time_slider.setMaximum(num_timesteps - 1)
             self.time_slider.setEnabled(True)
             self.time_label.setText(f"0 / {num_timesteps - 1}")
             self.play_btn.setEnabled(True)
-        
-        # Generate initial plot
-        self.update_time_series_plot()
-        # Ensure canvas dock is visible when data is loaded
-        if self.canvas_dock:
-            self.canvas_dock.show()
-        
-        # Signal that results are loaded (e.g. to initialize animation layer)
-        self.results_loaded.emit()
 
-    def show_plot_dock(self):
-        """Explicitly show the plot dock (used when user opens Results)."""
+        # Populate statistics variable list
+        if hasattr(self, "stats_tab"):
+            self.stats_tab.var_combo.clear()
+            all_vars = []
+            if self.results_data:
+                all_vars.extend(
+                    sorted(
+                        [
+                            k
+                            for k, v in self.results_data.items()
+                            if isinstance(v, np.ndarray)
+                        ]
+                    )
+                )
+            if self.results_data_ext:
+                all_vars.extend(
+                    sorted(
+                        [
+                            k
+                            for k, v in self.results_data_ext.items()
+                            if isinstance(v, np.ndarray)
+                        ]
+                    )
+                )
+            self.stats_tab.var_combo.addItems(all_vars)
+
+        # Generate an initial plot
+        self.update_time_series_plot()
         if self.canvas_dock:
-            if self.results_data is None:
-                self.show_empty_plot()
             self.canvas_dock.show()
+
+    def on_time_slider_changed(self, value):
+        """Handle time slider change from the animation tab."""
+        self.time_step_changed.emit(value)
+        self.update_dynamic_plot()
+
+    def _on_animation_setting_changed(self, *_):
+        """Emit setting change and refresh current timestep."""
+        self.animation_settings_changed.emit()
+        self.on_time_slider_changed(self.time_slider.value())
     
     def update_time_series_plot(self):
         """Update time series plot based on selections."""
@@ -511,19 +548,14 @@ class ResultsViewerDock(QDockWidget):
                     for rid in self.selected_reaches:
                         if rid in self.reach_id_map:
                             reach_list.append(self.reach_id_map[rid])
+                
                 if not reach_list:
                     reach_list = [self.ts_reach_combo.currentIndex()] if self.ts_reach_combo.count() else []
                 
                 for idx in reach_list:
                     # Assumption: Reach i starts at Node i
                     node_idx = idx
-                    # If Downstream, we need the downstream node.
-                    # Without topology, we can't be 100% sure, but usually it's i+1 in a chain.
-                    # Or we can just plot the upstream node elevation.
-                    
                     if 'Downstream' in variable:
-                        # Try to guess downstream node index (i+1)
-                        # This is risky but better than nothing if topology is missing
                         node_idx = idx + 1
                         if node_idx >= node_el.shape[1]:
                             node_idx = idx # Fallback
@@ -550,6 +582,29 @@ class ResultsViewerDock(QDockWidget):
                 self.canvas.draw()
                 if self.canvas_dock:
                     self.canvas_dock.show()
+                # Emit pane state for listeners
+                try:
+                    self.pane_state_changed.emit(
+                        "time_series",
+                        {
+                            "variable": variable,
+                            "mode": "grain_size",
+                            "reach_index": reach_idx,
+                        },
+                    )
+                except Exception:
+                    pass
+                try:
+                    self.pane_state_changed.emit(
+                        "time_series",
+                        {
+                            "variable": variable,
+                            "mode": "elevation",
+                            "reaches": reach_list,
+                        },
+                    )
+                except Exception:
+                    pass
                 return
 
             if variable not in self.results_data:
@@ -588,9 +643,21 @@ class ResultsViewerDock(QDockWidget):
             self.canvas.draw()
             if self.canvas_dock:
                 self.canvas_dock.show()
+            try:
+                self.pane_state_changed.emit(
+                    "time_series",
+                    {
+                        "variable": variable,
+                        "mode": "standard",
+                        "reaches": reach_list,
+                    },
+                )
+            except Exception:
+                pass
             
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
+
     
     def update_spatial_plot(self):
         """Update spatial plot (along reach index)."""
@@ -670,6 +737,17 @@ class ResultsViewerDock(QDockWidget):
             self.canvas.draw()
             if self.canvas_dock:
                 self.canvas_dock.show()
+            try:
+                self.pane_state_changed.emit(
+                    "spatial",
+                    {
+                        "variable": variable,
+                        "agg_method": self.spatial_agg_combo.currentText(),
+                        "yearly": bool(getattr(self, 'spatial_yearly_check', None) and self.spatial_yearly_check.isChecked()),
+                    },
+                )
+            except Exception:
+                pass
             
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
@@ -721,6 +799,18 @@ class ResultsViewerDock(QDockWidget):
             self.canvas.draw()
             if self.canvas_dock:
                 self.canvas_dock.show()
+            try:
+                self.pane_state_changed.emit(
+                    "animation",
+                    {
+                        "variable": variable,
+                        "time_step": int(time_step),
+                        "color_ramp": self.dyn_color_combo.currentText(),
+                        "width_factor": float(self.dyn_width_spin.value()),
+                    },
+                )
+            except Exception:
+                pass
             
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
@@ -756,6 +846,15 @@ class ResultsViewerDock(QDockWidget):
             self.canvas.draw()
             if self.canvas_dock:
                 self.canvas_dock.show()
+            try:
+                self.pane_state_changed.emit(
+                    "connectivity",
+                    {
+                        "variable": variable,
+                    },
+                )
+            except Exception:
+                pass
                 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
@@ -911,6 +1010,17 @@ class ResultsViewerDock(QDockWidget):
             if self.canvas_dock:
                 self.canvas_dock.show()
 
+            try:
+                self.pane_state_changed.emit(
+                    "long_profile",
+                    {
+                        "time_step": int(time_step),
+                        "reaches": [r['from'] for r in sorted_reaches],
+                    },
+                )
+            except Exception:
+                pass
+
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot profile: {str(e)}")
 
@@ -945,39 +1055,18 @@ class ResultsViewerDock(QDockWidget):
         else:
             self.time_slider.setValue(current + 1)
     
-    def update_statistics(self):
-        """Update statistics view."""
-        if self.results_data is None:
-            self.stats_label.setText("No results loaded.")
-            return
-        
-        try:
-            stats_text = "<h3>Results Summary</h3><table border='1'><tr><th>Variable</th><th>Shape</th><th>Mean</th><th>Std</th><th>Min</th><th>Max</th></tr>"
-            
-            for var_name, var_data in self.results_data.items():
-                if isinstance(var_data, np.ndarray) and var_data.ndim == 2:
-                    stats_text += f"<tr>"
-                    stats_text += f"<td>{var_name}</td>"
-                    stats_text += f"<td>{var_data.shape}</td>"
-                    stats_text += f"<td>{np.mean(var_data):.4f}</td>"
-                    stats_text += f"<td>{np.std(var_data):.4f}</td>"
-                    stats_text += f"<td>{np.min(var_data):.4f}</td>"
-                    stats_text += f"<td>{np.max(var_data):.4f}</td>"
-                    stats_text += f"</tr>"
-            
-            stats_text += "</table>"
-            self.stats_label.setText(stats_text)
-            
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to generate statistics: {str(e)}")
-    
-    def graph_selected_reach(self, from_n_value):
+    def graph_selected_reach(self, from_n_value, from_map=False):
         """Graph a specific reach (called externally when reach is selected).
         
         Args:
             from_n_value: The FromN attribute value of the selected reach
+            from_map: Whether the selection came from the map; if so, only refresh if on Time Series tab
         """
         if self.results_data is None:
+            return
+
+        # If from map, only update if on the Time Series tab
+        if from_map and self.current_tab_name() != "Time Series":
             return
 
         # Allow multiple selections
