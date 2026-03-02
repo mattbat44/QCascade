@@ -259,6 +259,9 @@ def run_simulation(config_path):
     else:
         data_output['reach_id'] = reach_data.from_n
 
+    # Store the input discharge array so the results viewer can plot it
+    data_output['Discharge [m^3/s]'] = Q
+
     print("Simulation completed.")
 
     # Save outputs to a logical destination. Prefer `paths.output_dir` if provided,
