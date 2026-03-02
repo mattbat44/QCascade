@@ -103,7 +103,8 @@ class DCascadePlugin:
         #self.results_viewer_dock.reach_selected_for_graph.connect(self.graph_reach)
         self.results_viewer_dock.results_loaded.connect(self.on_results_loaded)
         self.results_viewer_dock.animation_settings_changed.connect(lambda: self.on_time_step_changed(self.current_time_step))
-        self.results_viewer_dock.connectivity_check.stateChanged.connect(self.on_connectivity_toggled)
+        if hasattr(self.results_viewer_dock, 'connectivity_check'):
+            self.results_viewer_dock.connectivity_check.stateChanged.connect(self.on_connectivity_toggled)
         
         # Connect map canvas selection
         self.canvas.selectionChanged.connect(self.on_map_selection_changed)
@@ -298,6 +299,7 @@ class DCascadePlugin:
             self.selected_reach_id = None
             self.parameters_dock.set_selected_reach(None)
             if self.results_viewer_dock:
+                QgsMessageLog.logMessage("No reach selected", "D-CASCADE", Qgis.Info)
                 #self.results_viewer_dock.graph_selected_reach(None)
             return
 
@@ -314,8 +316,13 @@ class DCascadePlugin:
         self.parameters_dock.set_selected_reach(self.selected_reach_id)
 
         if self.results_viewer_dock and self.results_viewer_dock.results_data is not None:
-            self.results_viewer_dock.graph_selected_reach(reach_ids)
-    
+            # results viewer handles tab check via from_map=True
+            self.results_viewer_dock.graph_selected_reach(reach_ids, from_map=True)
+            
+            print(f"Selected reach(s) with FromN: {reach_ids}")
+
+
+
     def on_external_input_added(self, reach_idx, csv_path):
         """Handle external input CSV added to reach."""
         QgsMessageLog.logMessage(
