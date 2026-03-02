@@ -32,7 +32,8 @@ class AnimationTab(QWidget):
             'Transport capacity [m^3]',
             'Sediment budget [m^3]',
             'D50 active layer [m]',
-            'D50 volume out [m]'
+            'D50 volume out [m]',
+            'Discharge [m^3/s]'
         ])
         form.addRow("Variable:", self.dyn_variable_combo)
 

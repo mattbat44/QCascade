@@ -30,6 +30,7 @@ class TimeSeriesTab(QWidget):
             'Sediment budget [m^3]',
             'D50 active layer [m]',
             'D50 volume out [m]',
+            'Discharge [m^3/s]',
             'Elevation (Upstream) [m]',
             'Elevation (Downstream) [m]',
             'Elevation Change (Upstream) [m]'

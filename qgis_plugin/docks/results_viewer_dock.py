@@ -99,7 +99,15 @@ class ResultsViewerDock(QDockWidget):
         self.load_btn = QPushButton("Load Results (.json)")
         self.load_btn.clicked.connect(self.load_results)
         toolbar_layout.addWidget(self.load_btn)
-        
+
+        self.load_q_btn = QPushButton("Load Discharge CSV")
+        self.load_q_btn.setToolTip(
+            "Load a discharge CSV (rows = time steps, columns = reaches) and add it as "
+            "'Discharge [m^3/s]' to the current results so it can be plotted."
+        )
+        self.load_q_btn.clicked.connect(self.load_discharge_csv)
+        toolbar_layout.addWidget(self.load_q_btn)
+
         toolbar_layout.addStretch()
         
         self.main_layout.addLayout(toolbar_layout)
@@ -369,6 +377,74 @@ class ResultsViewerDock(QDockWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not load results: {str(e)}")
 
+    def load_discharge_csv(self):
+        """Load a discharge CSV file and add it to the current results as 'Discharge [m^3/s]'.
+
+        The CSV must have rows = time steps and columns = reaches (one column per reach,
+        ordered the same as the reach IDs in the loaded results).
+        """
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Discharge CSV", "", "CSV files (*.csv);;All files (*)"
+        )
+        if not file_path:
+            return
+
+        try:
+            import pandas as pd
+            df = pd.read_csv(file_path, header=None)
+            # Drop any header row that is non-numeric
+            try:
+                df = df.apply(pd.to_numeric, errors='coerce')
+                df = df.dropna(how='all')
+            except Exception:
+                pass
+            q_array = df.values.astype(float)
+
+            if self.results_data is None:
+                self.results_data = {}
+
+            self.results_data['Discharge [m^3/s]'] = q_array
+
+            # Refresh data ranges and UI
+            if q_array.size > 0:
+                self.data_ranges['Discharge [m^3/s]'] = (float(np.nanmin(q_array)), float(np.nanmax(q_array)))
+
+            # Rebuild reach IDs if not already set
+            if not self.reach_ids and q_array.ndim == 2:
+                n = q_array.shape[1]
+                self.reach_ids = [str(i + 1) for i in range(n)]
+                self.reach_id_map = {str(i + 1): i for i in range(n)}
+                self.ts_reach_combo.clear()
+                for rid in self.reach_ids:
+                    self.ts_reach_combo.addItem(f"Reach {rid}")
+                self.ts_reach_combo.setEnabled(True)
+
+            # Enable time slider if not already
+            if q_array.ndim == 2 and not self.time_slider.isEnabled():
+                num_timesteps = q_array.shape[0]
+                self.time_slider.setMaximum(num_timesteps - 1)
+                self.time_slider.setEnabled(True)
+                self.time_label.setText(f"0 / {num_timesteps - 1}")
+                self.play_btn.setEnabled(True)
+
+            QgsMessageLog.logMessage(
+                f"Loaded discharge CSV: {Path(file_path).name} ({q_array.shape})",
+                "D-CASCADE", Qgis.Info
+            )
+            self.info_label.setText(
+                (self.info_label.text().rstrip() +
+                 f" | Q loaded: {Path(file_path).name}")
+            )
+            # Switch to Time Series tab on the Discharge variable and refresh
+            idx = self.ts_variable_combo.findText("Discharge [m^3/s]")
+            if idx >= 0:
+                self.ts_variable_combo.setCurrentIndex(idx)
+            self.tab_widget.setCurrentIndex(0)
+            self.update_time_series_plot()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load discharge CSV: {str(e)}")
+
     def update_ui_with_results(self):
         """Update controls and cached metadata after loading results."""
         if self.results_data is None:
@@ -402,14 +478,21 @@ class ResultsViewerDock(QDockWidget):
             if self.network_layer:
                 try:
                     from_n_idx = self.network_layer.fields().indexFromName("FromN")
-                    if from_n_idx >= 0 and "Volume out [m^3]" in self.results_data:
+                    # Use the first 2-D result array to determine expected reach count
+                    _ref_key = next(
+                        (k for k in ("Volume out [m^3]", "Discharge [m^3/s]")
+                         if k in self.results_data and isinstance(self.results_data[k], np.ndarray)
+                         and self.results_data[k].ndim == 2),
+                        None,
+                    )
+                    if from_n_idx >= 0 and _ref_key is not None:
                         from_ns = []
                         for f in self.network_layer.getFeatures():
                             val = f.attribute(from_n_idx)
                             if val is not None:
                                 from_ns.append(int(val))
                         sorted_ids = sorted(from_ns)
-                        if len(sorted_ids) == self.results_data["Volume out [m^3]"].shape[1]:
+                        if len(sorted_ids) == self.results_data[_ref_key].shape[1]:
                             self.reach_ids = [str(x) for x in sorted_ids]
                             self.reach_id_map = {
                                 str(x): i for i, x in enumerate(sorted_ids)
@@ -425,19 +508,32 @@ class ResultsViewerDock(QDockWidget):
                         f"Could not infer IDs: {e}", "D-CASCADE", Qgis.Warning
                     )
 
-            if not inferred and "Volume out [m^3]" in self.results_data:
-                num_reaches = self.results_data["Volume out [m^3]"].shape[1]
+            # Determine n_reaches from the first available 2-D array
+            _ref_key = next(
+                (k for k in ("Volume out [m^3]", "Discharge [m^3/s]")
+                 if k in self.results_data and isinstance(self.results_data[k], np.ndarray)
+                 and self.results_data[k].ndim == 2),
+                None,
+            )
+            if not inferred and _ref_key is not None:
+                num_reaches = self.results_data[_ref_key].shape[1]
                 self.reach_ids = [str(i + 1) for i in range(num_reaches)]
                 self.reach_id_map = {str(i + 1): i for i in range(num_reaches)}
 
         # Update reach selector and time slider for time series
-        if "Volume out [m^3]" in self.results_data:
+        # Use Volume out as the canonical shape source; fall back to Discharge if absent
+        _shape_key = None
+        for _candidate in ("Volume out [m^3]", "Discharge [m^3/s]"):
+            if _candidate in self.results_data and isinstance(self.results_data[_candidate], np.ndarray):
+                _shape_key = _candidate
+                break
+        if _shape_key:
             self.ts_reach_combo.clear()
             for rid in self.reach_ids:
                 self.ts_reach_combo.addItem(f"Reach {rid}")
             self.ts_reach_combo.setEnabled(True)
 
-            num_timesteps = self.results_data["Volume out [m^3]"].shape[0]
+            num_timesteps = self.results_data[_shape_key].shape[0]
             self.time_slider.setMaximum(num_timesteps - 1)
             self.time_slider.setEnabled(True)
             self.time_label.setText(f"0 / {num_timesteps - 1}")
