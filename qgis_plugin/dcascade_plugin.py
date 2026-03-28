@@ -221,8 +221,6 @@ class DCascadePlugin:
         if self.results_viewer_dock:
             self.results_viewer_dock.setVisible(True)
             self.results_viewer_dock.raise_()
-            # Ensure plot dock is shown alongside controls
-            self.results_viewer_dock.show_plot_dock()
 
     def remove_toolbar_items(self):
         """Remove any toolbar items we may have added (dropdown or legacy)."""

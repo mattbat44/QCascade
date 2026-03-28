@@ -109,6 +109,11 @@ class ResultsViewerDock(QDockWidget):
         toolbar_layout.addWidget(self.load_q_btn)
 
         toolbar_layout.addStretch()
+
+        self.show_graph_btn = QPushButton("Show Graph")
+        self.show_graph_btn.setToolTip("Open the graph panel to view plots.")
+        self.show_graph_btn.clicked.connect(self.show_plot_dock)
+        toolbar_layout.addWidget(self.show_graph_btn)
         
         self.main_layout.addLayout(toolbar_layout)
         
@@ -567,8 +572,6 @@ class ResultsViewerDock(QDockWidget):
 
         # Generate an initial plot
         self.update_time_series_plot()
-        if self.canvas_dock:
-            self.canvas_dock.show()
 
     def on_time_slider_changed(self, value):
         """Handle time slider change from the animation tab."""
@@ -1207,14 +1210,8 @@ class ResultsViewerDock(QDockWidget):
     def setVisible(self, visible):
         """Keep plot dock visibility in sync with the control dock."""
         super().setVisible(visible)
-        if self.canvas_dock:
-            # Show canvas dock whenever Results is shown (even if empty plot)
-            if visible:
-                if self.results_data is None:
-                    self.show_empty_plot()
-                self.canvas_dock.show()
-            else:
-                self.canvas_dock.hide()
+        if self.canvas_dock and not visible:
+            self.canvas_dock.hide()
 
     def closeEvent(self, event):
         """Ensure the canvas dock closes when the control dock closes."""
