@@ -8,6 +8,25 @@ This repository provides a QGIS-based interface and workflow for running D-CASCA
 
 Important: this codebase does not modify the core scientific D-CASCADE model logic developed by the original teams. It is an integration and usability layer (setup, configuration, execution, and visualization) around that existing model work.
 
+## Model Code
+
+The core D-CASCADE model files are **not stored in this repository**.  They are
+downloaded verbatim from the official upstream release when you install the
+plugin:
+
+- **Upstream repository**: <https://github.com/dcascade-py/dcascade-py>
+- **Release used**: [v2.0.0](https://github.com/dcascade-py/dcascade-py/releases/tag/v2.0.0)
+
+The fetch script `fetch_dcascade_model.py` (in the project root) downloads
+those files into `qgis_plugin/src/` the first time it is run.  Installation
+scripts call it automatically; see the *Installation* section below.
+
+If you need to refresh the model files manually (e.g. after a clean clone):
+
+```bash
+python fetch_dcascade_model.py
+```
+
 ## Academic Credit and Citation
 
 Please credit the original D-CASCADE model creators and the Python implementation team when using this plugin in research outputs.
@@ -61,8 +80,16 @@ For development and testing, use the provided PowerShell script to create a syml
    ```
    
    This sets up development mode and dependencies for the testing profile.
+   It also downloads the upstream model files into `qgis_plugin/src/` automatically.
 
-3. **Open QGIS with the profile**:
+3. **For a plain Python / uv workflow** (no QGIS yet):
+   ```bash
+   uv sync
+   python fetch_dcascade_model.py
+   pytest qgis_plugin/unit_tests/
+   ```
+
+4. **Open QGIS with the profile**:
    - Start QGIS and select the `dcascade-testing` profile
    - Or use: `qgis --profile dcascade-testing`
 

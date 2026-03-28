@@ -183,3 +183,17 @@ Write-Host "- Check for multiple QGIS installations" -ForegroundColor White
 Write-Host "- Run this script again and select the correct QGIS path" -ForegroundColor White
 Write-Host "- Check QGIS Python Console: import sys; print(sys.executable)" -ForegroundColor White
 Write-Host ""
+
+# Fetch upstream model files
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "Fetching upstream model files (dcascade-py v2.0.0)..." -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$fetchScript = Join-Path $scriptRoot "fetch_dcascade_model.py"
+if (Test-Path $fetchScript) {
+    & $pythonExe $fetchScript
+} else {
+    Write-Host "WARNING: fetch_dcascade_model.py not found at $fetchScript – skipping." -ForegroundColor Yellow
+    Write-Host "  Run 'python fetch_dcascade_model.py' manually from the project root." -ForegroundColor Yellow
+}
+Write-Host ""
