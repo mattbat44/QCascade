@@ -1,43 +1,18 @@
 @echo off
 echo ====================================================
-echo D-CASCADE QGIS Plugin Installation Script
+echo D-CASCADE QGIS Plugin Basic Installation
 echo ====================================================
 echo.
 
-echo [1/3] Installing plugin in development mode...
-echo This will create a symbolic link in the QGIS plugins directory
+echo This installs the plugin for the default QGIS profile
+echo and installs Python dependencies into QGIS automatically.
 echo.
-powershell -ExecutionPolicy Bypass -File "%~dp0install_plugin_dev.ps1"
+powershell -ExecutionPolicy Bypass -File "%~dp0install_basic_user.ps1"
 if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Plugin development installation failed!
+    echo ERROR: Installation failed!
     pause
     exit /b %ERRORLEVEL%
 )
-echo [1/3] Complete
-echo.
-
-echo [2/3] Setting up QGIS Python environment...
-echo This configures environment variables for QGIS Python
-echo.
-powershell -ExecutionPolicy Bypass -File "%~dp0setup_qgis_environment.ps1"
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: QGIS environment setup failed!
-    pause
-    exit /b %ERRORLEVEL%
-)
-echo [2/3] Complete
-echo.
-
-echo [3/3] Installing dependencies to QGIS Python...
-echo This installs required Python packages (numpy, pandas, geopandas, matplotlib)
-echo.
-powershell -ExecutionPolicy Bypass -File "%~dp0install_to_qgis_python.ps1"
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Dependency installation failed!
-    pause
-    exit /b %ERRORLEVEL%
-)
-echo [3/3] Complete
 echo.
 
 echo ====================================================

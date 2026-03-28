@@ -4,7 +4,21 @@ QGIS plugin version of the D-CASCADE sediment transport modeling framework.
 
 ## Installation
 
-### Development Installation (Recommended)
+### Basic Installation (Recommended for most users)
+
+This is a one-click installer for non-developers.
+
+1. Close QGIS if it is running.
+2. In this project folder, double-click `install.bat`.
+3. Wait for completion.
+4. Start QGIS.
+5. Go to **Plugins -> Manage and Install Plugins** and enable **D-CASCADE**.
+
+The installer automatically:
+- Copies the plugin to the default QGIS profile.
+- Installs required Python dependencies into QGIS Python.
+
+### Development Installation
 
 For development and testing, use the provided PowerShell script to create a symlink:
 
@@ -15,10 +29,10 @@ For development and testing, use the provided PowerShell script to create a syml
 
 2. **Run Installation Script**:
    ```powershell
-   .\install_plugin_dev.ps1
+   .\install_dev.bat
    ```
    
-   This creates a junction link from the QGIS plugins directory to your development directory, allowing code changes to be immediately available.
+   This sets up development mode and dependencies for the testing profile.
 
 3. **Open QGIS with the profile**:
    - Start QGIS and select the `dcascade-testing` profile
