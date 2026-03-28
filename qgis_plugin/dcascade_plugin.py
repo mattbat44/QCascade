@@ -19,6 +19,12 @@ sys.path.insert(0, str(src_path))
 
 from json_serializer import load_from_json
 
+from .compat import (
+    QVariant,
+    Qt_RightDockWidgetArea,
+    Qt_BottomDockWidgetArea,
+    Qt_Checked,
+)
 from .docks.parameters_dock import ParametersDock
 from .docks.results_viewer_dock import ResultsViewerDock
 from .core.config_manager import DCascadeConfig, PathsConfig, SedimentConfig, TimeConfig, PhysicsConfig, OptionsConfig, ExternalInputsConfig
@@ -85,10 +91,10 @@ class DCascadePlugin:
         self.results_viewer_dock = ResultsViewerDock(self.iface.mainWindow())
         
         # Add docks to QGIS
-        self.iface.addDockWidget(Qt.RightDockWidgetArea, self.parameters_dock)
+        self.iface.addDockWidget(Qt_RightDockWidgetArea, self.parameters_dock)
         self.parameters_dock.setVisible(False)  # Hide by default
         
-        self.iface.addDockWidget(Qt.BottomDockWidgetArea, self.results_viewer_dock)
+        self.iface.addDockWidget(Qt_BottomDockWidgetArea, self.results_viewer_dock)
         self.results_viewer_dock.setVisible(False)  # Hide by default
         
         # Connect signals
@@ -367,7 +373,7 @@ class DCascadePlugin:
     
     def on_connectivity_toggled(self, state):
         """Handle connectivity curves checkbox toggle."""
-        enabled = (state == 2)  # Qt.Checked = 2
+        enabled = (int(state) == int(Qt_Checked))  # Qt.Checked = 2
         self.toggle_connectivity_curves(enabled)
 
     def on_time_step_changed(self, time_step):
@@ -414,7 +420,6 @@ class DCascadePlugin:
             QgsStyle,
             QgsRendererRange,
         )
-        from qgis.PyQt.QtCore import QVariant
 
         geom_type = QgsWkbTypes.displayString(self.network_layer.wkbType())
         crs_authid = self.network_layer.crs().authid()
@@ -575,7 +580,6 @@ class DCascadePlugin:
             QgsRendererRange,
             QgsStyle
         )
-        from qgis.PyQt.QtCore import QVariant
         import numpy as np
         
         # Create or reuse connectivity layer

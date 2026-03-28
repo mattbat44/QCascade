@@ -8,6 +8,7 @@ from qgis.PyQt.QtWidgets import (
     QLabel, QSlider
 )
 from qgis.PyQt.QtCore import Qt
+from ...compat import Qt_Horizontal
 
 
 class LongProfileTab(QWidget):
@@ -36,7 +37,7 @@ class LongProfileTab(QWidget):
         # Time slider for long profile animation
         slider_layout = QHBoxLayout()
         slider_layout.addWidget(QLabel("Time Step:"))
-        self.lp_time_slider = QSlider(Qt.Horizontal)
+        self.lp_time_slider = QSlider(Qt_Horizontal)
         self.lp_time_slider.setMinimum(0)
         self.lp_time_slider.setMaximum(100)
         self.lp_time_slider.setValue(0)
