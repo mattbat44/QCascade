@@ -579,6 +579,8 @@ class ResultsViewerDock(QDockWidget):
         """Emit setting change and refresh current timestep."""
         self.animation_settings_changed.emit()
         self.on_time_slider_changed(self.time_slider.value())
+        if hasattr(self, 'animation_timer') and self.animation_timer.isActive():
+            self.animation_timer.setInterval(self.frame_duration_spin.value())
     
     def update_time_series_plot(self):
         """Update time series plot based on selections."""
