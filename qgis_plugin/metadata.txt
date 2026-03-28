@@ -6,7 +6,7 @@ version=2.0.0
 author=D-CASCADE Team
 email=
 
-about=D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-based modeling framework for sediment transport and connectivity analysis in large river networks.
+about=D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-based modeling framework for sediment transport and connectivity analysis in large river networks. Compatible with QGIS 3.x (PyQt5) and QGIS 4.0 (PyQt6).
 
 tags=sediment,transport,river,network,modeling
 

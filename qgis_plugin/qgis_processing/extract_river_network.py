@@ -40,7 +40,7 @@ from qgis.core import (
     QgsRaster
 )
 from qgis import processing
-from PyQt5.QtCore import QVariant
+from ..compat import QVariant
 import numpy as np
 
 
@@ -50,9 +50,9 @@ class RiverNetworkExtractionAlgorithm(QgsProcessingAlgorithm):
     for use with D-CASCADE sediment transport model.
     
     Requirements:
-    - QGIS 3.x or higher
+    - QGIS 3.x or higher (including QGIS 4.0)
     - SAGA GIS 7.x or higher (for hydrological processing)
-    - PyQt5
+    - PyQt5 (QGIS 3.x) or PyQt6 (QGIS 4.0)
     
     Limitations:
     - Assumes square or near-square DEM pixels

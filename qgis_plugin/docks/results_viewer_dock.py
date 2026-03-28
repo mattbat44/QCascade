@@ -10,8 +10,15 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.core import Qgis, QgsMessageLog
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
+from ..compat import (
+    FigureCanvasQTAgg as FigureCanvas,
+    NavigationToolbar2QT,
+    Qt_BottomDockWidgetArea,
+    Qt_CustomContextMenu,
+    DockWidgetMovable,
+    DockWidgetFloatable,
+    DockWidgetClosable,
+)
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import sys
@@ -80,7 +87,7 @@ class ResultsViewerDock(QDockWidget):
 
         self.canvas_dock = QDockWidget("Results Plot", self.main_window)
         self.canvas_dock.setObjectName("DCascadeResultsPlotDock")
-        self.canvas_dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable)
+        self.canvas_dock.setFeatures(DockWidgetMovable | DockWidgetFloatable | DockWidgetClosable)
         # Container so we can include toolbar + canvas
         container = QWidget()
         vbox = QVBoxLayout(container)
@@ -88,7 +95,7 @@ class ResultsViewerDock(QDockWidget):
         vbox.addWidget(self.toolbar)
         vbox.addWidget(self.canvas)
         self.canvas_dock.setWidget(container)
-        self.main_window.addDockWidget(Qt.BottomDockWidgetArea, self.canvas_dock)
+        self.main_window.addDockWidget(Qt_BottomDockWidgetArea, self.canvas_dock)
         self.canvas_dock.hide()
     
     def init_ui(self):
@@ -154,7 +161,7 @@ class ResultsViewerDock(QDockWidget):
         # Matplotlib canvas for plotting (hosted in its own dock)
         self.figure = Figure(figsize=(10, 6))
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.canvas.setContextMenuPolicy(Qt_CustomContextMenu)
         self.canvas.customContextMenuRequested.connect(self._show_canvas_menu)
         # Basic navigation toolbar for saving/zooming on right-click menu
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
