@@ -8,7 +8,7 @@ between PyQt5 (used by QGIS 3.x) and PyQt6 (used by QGIS 4.0).
 """
 
 from qgis.PyQt.QtCore import Qt, PYQT_VERSION_STR
-from qgis.PyQt.QtWidgets import QDockWidget
+from qgis.PyQt.QtWidgets import QDockWidget, QSizePolicy, QToolButton
 
 # Detect PyQt major version (5 for QGIS 3.x, 6 for QGIS 4.0)
 PYQT_MAJOR = int(PYQT_VERSION_STR.split('.')[0])
@@ -91,6 +91,48 @@ except AttributeError:
     DockWidgetMovable = QDockWidget.DockWidgetFeature.DockWidgetMovable
     DockWidgetFloatable = QDockWidget.DockWidgetFeature.DockWidgetFloatable
     DockWidgetClosable = QDockWidget.DockWidgetFeature.DockWidgetClosable
+
+# ---------------------------------------------------------------------------
+# QToolButton popup mode
+# PyQt5: QToolButton.MenuButtonPopup
+# PyQt6: QToolButton.ToolButtonPopupMode.MenuButtonPopup
+# ---------------------------------------------------------------------------
+try:
+    QToolButton_MenuButtonPopup = QToolButton.MenuButtonPopup
+except AttributeError:
+    QToolButton_MenuButtonPopup = QToolButton.ToolButtonPopupMode.MenuButtonPopup
+
+try:
+    QToolButton_InstantPopup = QToolButton.InstantPopup
+except AttributeError:
+    QToolButton_InstantPopup = QToolButton.ToolButtonPopupMode.InstantPopup
+
+# ---------------------------------------------------------------------------
+# QSizePolicy size type constants
+# PyQt5: QSizePolicy.Minimum, QSizePolicy.Expanding, etc.
+# PyQt6: QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding, etc.
+# Some bindings expose only one style, so resolve dynamically per constant.
+# ---------------------------------------------------------------------------
+def _resolve_qsizepolicy(name: str):
+    """Resolve QSizePolicy enum constants across Qt bindings."""
+    direct = getattr(QSizePolicy, name, None)
+    if direct is not None:
+        return direct
+
+    policy_enum = getattr(QSizePolicy, 'Policy', None)
+    if policy_enum is not None:
+        scoped = getattr(policy_enum, name, None)
+        if scoped is not None:
+            return scoped
+
+    raise AttributeError(f'QSizePolicy constant {name} is not available')
+
+
+QSizePolicy_Minimum = _resolve_qsizepolicy('Minimum')
+QSizePolicy_Expanding = _resolve_qsizepolicy('Expanding')
+QSizePolicy_Fixed = _resolve_qsizepolicy('Fixed')
+QSizePolicy_Preferred = _resolve_qsizepolicy('Preferred')
+QSizePolicy_Maximum = _resolve_qsizepolicy('Maximum')
 
 # ---------------------------------------------------------------------------
 # Matplotlib Qt backend

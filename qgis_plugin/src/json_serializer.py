@@ -150,30 +150,45 @@ def results_to_spreadsheet(
     def _array_to_dataframe(arr: np.ndarray, col_ids: List) -> "pd.DataFrame":
         """Convert a 2-D (time × reach) array to a labelled DataFrame."""
         import pandas as pd
-        cols = [f"Reach {r}" for r in col_ids] if col_ids else [f"Reach {i + 1}" for i in range(arr.shape[1])]
+
+        n_cols = arr.shape[1]
+        if col_ids:
+            # Keep as many provided labels as available and fill any missing
+            # labels so DataFrame columns always match the array width.
+            normalized = list(col_ids[:n_cols])
+            if len(normalized) < n_cols:
+                normalized.extend(range(len(normalized) + 1, n_cols + 1))
+            cols = [f"Reach {r}" for r in normalized]
+        else:
+            cols = [f"Reach {i + 1}" for i in range(n_cols)]
+
         index = pd.RangeIndex(start=1, stop=arr.shape[0] + 1, name="Time Step")
         return pd.DataFrame(arr, index=index, columns=cols)
 
     def _write_dict(writer: "pd.ExcelWriter", source: Dict[str, Any], col_ids: List, used_names: set) -> None:
         """Write all exportable arrays from *source* into *writer*."""
+        import logging
         for var_name, value in source.items():
             if not isinstance(value, np.ndarray):
                 continue
             arr = np.asarray(value, dtype=float)
 
-            if arr.ndim == 2:
-                sheet = _unique_sheet_name(_safe_sheet_name(var_name), used_names)
-                df = _array_to_dataframe(arr, col_ids)
-                df.to_excel(writer, sheet_name=sheet)
-
-            elif arr.ndim == 3:
-                n_classes = arr.shape[2]
-                for cls_idx in range(n_classes):
-                    suffix = f" C{cls_idx + 1}"
-                    sheet = _unique_sheet_name(_safe_sheet_name(var_name, suffix), used_names)
-                    df = _array_to_dataframe(arr[:, :, cls_idx], col_ids)
+            try:
+                if arr.ndim == 2:
+                    sheet = _unique_sheet_name(_safe_sheet_name(var_name), used_names)
+                    df = _array_to_dataframe(arr, col_ids)
                     df.to_excel(writer, sheet_name=sheet)
-            # Arrays with 4+ dimensions are skipped (too complex for flat sheets)
+
+                elif arr.ndim == 3:
+                    n_classes = arr.shape[2]
+                    for cls_idx in range(n_classes):
+                        suffix = f" C{cls_idx + 1}"
+                        sheet = _unique_sheet_name(_safe_sheet_name(var_name, suffix), used_names)
+                        df = _array_to_dataframe(arr[:, :, cls_idx], col_ids)
+                        df.to_excel(writer, sheet_name=sheet)
+                # Arrays with 4+ dimensions are skipped (too complex for flat sheets)
+            except Exception as exc:  # noqa: BLE001
+                logging.warning("D-CASCADE export: skipping variable %r – %s", var_name, exc)
 
     # ------------------------------------------------------------------ export
     import pandas as pd

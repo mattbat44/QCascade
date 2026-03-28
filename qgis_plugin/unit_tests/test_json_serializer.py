@@ -207,6 +207,45 @@ def test_spreadsheet_reach_ids_as_columns():
         assert headers == ["Reach 10", "Reach 20", "Reach 30"]
 
 
+def test_spreadsheet_reach_ids_shorter_than_array_width():
+    """Export remains valid when provided reach_ids are fewer than array columns."""
+    import openpyxl
+
+    arr = np.ones((20, 8), dtype=np.float64)
+    data_output = {'Volume out [m^3]': arr}
+    reach_ids = [101, 102, 103, 104, 105, 106, 107]  # 7 labels for 8 columns
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path, reach_ids=reach_ids)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        headers = [ws.cell(row=1, column=c).value for c in range(2, 10)]
+        assert headers == [
+            "Reach 101", "Reach 102", "Reach 103", "Reach 104",
+            "Reach 105", "Reach 106", "Reach 107", "Reach 8",
+        ]
+
+
+def test_spreadsheet_reach_ids_longer_than_array_width():
+    """Extra reach_ids are truncated to the array width."""
+    import openpyxl
+
+    arr = np.ones((5, 3), dtype=np.float64)
+    data_output = {'Volume out [m^3]': arr}
+    reach_ids = [10, 20, 30, 40, 50]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path, reach_ids=reach_ids)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        headers = [ws.cell(row=1, column=c).value for c in range(2, 5)]
+        assert headers == ["Reach 10", "Reach 20", "Reach 30"]
+
+
 def test_spreadsheet_values_correct():
     """Values written to the sheet match the original numpy array."""
     import openpyxl

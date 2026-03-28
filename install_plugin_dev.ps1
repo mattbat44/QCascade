@@ -13,7 +13,7 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $devPath = Join-Path $scriptPath "qgis_plugin"
 
 # QGIS plugins path for the specified profile
-$qgisPluginsPath = "$env:APPDATA\QGIS\QGIS3\profiles\$profileName\python\plugins\$pluginName"
+$qgisPluginsPath = "$env:APPDATA\QGIS\QGIS\profiles\$profileName\python\plugins\$pluginName"
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "D-CASCADE QGIS Plugin Development Setup" -ForegroundColor Cyan

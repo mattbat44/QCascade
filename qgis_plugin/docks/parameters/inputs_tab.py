@@ -5,12 +5,13 @@
 
 from qgis.PyQt.QtWidgets import (
     QWidget, QFormLayout, QLineEdit, QPushButton, 
-    QHBoxLayout, QLabel, QFileDialog, QSpacerItem, QSizePolicy, 
+    QHBoxLayout, QLabel, QFileDialog, QSpacerItem,
     QMenu, QToolButton
 )
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.gui import QgsMapLayerComboBox
 from qgis.core import QgsMapLayerProxyModel
+from ...compat import QToolButton_MenuButtonPopup, QSizePolicy_Minimum, QSizePolicy_Expanding
 import csv
 
 
@@ -50,7 +51,7 @@ class InputsTab(QWidget):
         self.csv_btn = QToolButton()
         self.csv_btn.setText("Browse...")
         self.csv_btn.clicked.connect(self.browse_csv)
-        self.csv_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        self.csv_btn.setPopupMode(QToolButton_MenuButtonPopup)
         csv_menu = QMenu(self.csv_btn)
         csv_menu.addAction("Browse...").triggered.connect(self.browse_csv)
         csv_menu.addAction("Create template").triggered.connect(self.create_discharge_template)
@@ -69,7 +70,7 @@ class InputsTab(QWidget):
         self.overbank_csv_btn = QToolButton()
         self.overbank_csv_btn.setText("Browse...")
         self.overbank_csv_btn.clicked.connect(self.browse_overbank_csv)
-        self.overbank_csv_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        self.overbank_csv_btn.setPopupMode(QToolButton_MenuButtonPopup)
         overbank_menu = QMenu(self.overbank_csv_btn)
         overbank_menu.addAction("Browse...").triggered.connect(self.browse_overbank_csv)
         overbank_menu.addAction("Create template").triggered.connect(self.create_overbank_template)
@@ -108,7 +109,7 @@ class InputsTab(QWidget):
         layout.addRow("Actions:", actions_layout)
 
         # Spacer to keep layout tidy if more widgets are added later
-        layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        layout.addItem(QSpacerItem(0, 0, QSizePolicy_Minimum, QSizePolicy_Expanding))
     
     def on_layer_changed(self, layer):
         """Handle layer selection change."""

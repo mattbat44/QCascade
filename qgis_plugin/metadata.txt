@@ -1,6 +1,7 @@
 [general]
 name=D-CASCADE
 qgisMinimumVersion=3.0
+qgisMaximumVersion=4.0
 description=Dynamic CAtchment Sediment Connectivity And Delivery - Sediment transport modeling plugin
 version=2.0.0
 author=D-CASCADE Team

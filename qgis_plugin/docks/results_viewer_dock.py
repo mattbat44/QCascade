@@ -474,8 +474,17 @@ class ResultsViewerDock(QDockWidget):
             return
 
         try:
-            reach_ids = self.reach_ids if self.reach_ids else None
-            results_to_spreadsheet(
+            # Force-reload json_serializer so the running QGIS session always
+            # uses the latest code rather than a module cached from an earlier
+            # plugin load (Plugin Reloader does not reload non-package imports).
+            import importlib, sys
+            _jser_name = 'json_serializer'
+            if _jser_name in sys.modules:
+                importlib.reload(sys.modules[_jser_name])
+            from json_serializer import results_to_spreadsheet as _rts
+
+            reach_ids = self._build_export_reach_ids()
+            _rts(
                 self.results_data,
                 file_path,
                 extended_output=self.results_data_ext,
@@ -500,6 +509,32 @@ class ResultsViewerDock(QDockWidget):
             )
         except Exception as e:
             QMessageBox.critical(self, "Export Failed", f"Could not export results:\n{str(e)}")
+
+    def _build_export_reach_ids(self):
+        """Build reach IDs sized for spreadsheet export across all loaded arrays."""
+        max_reaches = 0
+
+        def _update_max_width(source):
+            nonlocal max_reaches
+            if not source:
+                return
+            for value in source.values():
+                if not isinstance(value, np.ndarray):
+                    continue
+                if value.ndim >= 2 and value.shape[1] > max_reaches:
+                    max_reaches = int(value.shape[1])
+
+        _update_max_width(self.results_data)
+        _update_max_width(self.results_data_ext)
+
+        if max_reaches <= 0:
+            return None
+
+        labels = list(self.reach_ids) if self.reach_ids else []
+        labels = labels[:max_reaches]
+        if len(labels) < max_reaches:
+            labels.extend(str(i + 1) for i in range(len(labels), max_reaches))
+        return labels
 
     def update_ui_with_results(self):
         """Update controls and cached metadata after loading results."""

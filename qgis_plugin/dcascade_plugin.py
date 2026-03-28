@@ -24,6 +24,7 @@ from .compat import (
     Qt_RightDockWidgetArea,
     Qt_BottomDockWidgetArea,
     Qt_Checked,
+    QToolButton_InstantPopup,
 )
 from .docks.parameters_dock import ParametersDock
 from .docks.results_viewer_dock import ResultsViewerDock
@@ -131,7 +132,7 @@ class DCascadePlugin:
         self.toolbar_button = QToolButton()
         self.toolbar_button.setText("D-CASCADE")
         self.toolbar_button.setMenu(menu)
-        self.toolbar_button.setPopupMode(QToolButton.InstantPopup)
+        self.toolbar_button.setPopupMode(QToolButton_InstantPopup)
         self.toolbar_button.setToolTip("D-CASCADE tools")
 
         # Place the dropdown button on the toolbar in order
@@ -433,21 +434,22 @@ class DCascadePlugin:
                 QgsField("value", QVariant.Double),
             ])
             self.animation_layer.updateFields()
-            QgsProject.instance().addMapLayer(self.animation_layer)
-            # Move animation layer above network layer for visibility
-            root = QgsProject.instance().layerTreeRoot()
+            # Add without auto-inserting in layer tree, then place explicitly.
+            # This avoids clone/remove layer-tree operations that can hide layers
+            # in newer QGIS versions.
+            project = QgsProject.instance()
+            root = project.layerTreeRoot()
+            project.addMapLayer(self.animation_layer, False)
             net_node = root.findLayer(self.network_layer.id())
-            anim_node = root.findLayer(self.animation_layer.id())
-            if net_node and anim_node:
+            if net_node:
                 parent = net_node.parent() or root
-                anim_parent = anim_node.parent() or root
                 try:
-                    # QgsLayerTreeGroup does not have indexOfChild, use children().index()
                     idx = parent.children().index(net_node)
-                    parent.insertChildNode(idx, anim_node.clone())
-                    anim_parent.removeChildNode(anim_node)
                 except ValueError:
-                    pass
+                    idx = 0
+                parent.insertLayer(idx, self.animation_layer)
+            else:
+                root.insertLayer(0, self.animation_layer)
         else:
             prov = self.animation_layer.dataProvider()
             prov.truncate()
@@ -480,6 +482,11 @@ class DCascadePlugin:
         if features:
             prov.addFeatures(features)
             self.animation_layer.updateExtents()
+
+        # Ensure the temporary layer remains visible in the layer tree.
+        anim_node = QgsProject.instance().layerTreeRoot().findLayer(self.animation_layer.id())
+        if anim_node:
+            anim_node.setItemVisibilityChecked(True)
 
         # Build or reuse renderer once per variable/ramp/width using global data range
         if not hasattr(self, "_animation_renderer_variable"):
@@ -592,21 +599,21 @@ class DCascadePlugin:
                 QgsField("to_outlet", QVariant.Int),  # 1 if going to outlet, 0 otherwise
             ])
             self.connectivity_layer.updateFields()
-            QgsProject.instance().addMapLayer(self.connectivity_layer)
-            
-            # Move connectivity layer above animation layer for visibility
-            root = QgsProject.instance().layerTreeRoot()
+            project = QgsProject.instance()
+            root = project.layerTreeRoot()
+            project.addMapLayer(self.connectivity_layer, False)
+
+            # Place connectivity layer above animation layer for visibility.
             anim_node = root.findLayer(self.animation_layer.id()) if self.animation_layer else None
-            conn_node = root.findLayer(self.connectivity_layer.id())
-            if anim_node and conn_node:
+            if anim_node:
                 parent = anim_node.parent() or root
-                conn_parent = conn_node.parent() or root
                 try:
                     idx = parent.children().index(anim_node)
-                    parent.insertChildNode(idx, conn_node.clone())
-                    conn_parent.removeChildNode(conn_node)
-                except (ValueError, AttributeError):
-                    pass
+                except ValueError:
+                    idx = 0
+                parent.insertLayer(idx, self.connectivity_layer)
+            else:
+                root.insertLayer(0, self.connectivity_layer)
         else:
             prov = self.connectivity_layer.dataProvider()
             prov.truncate()
@@ -720,86 +727,59 @@ class DCascadePlugin:
         if features:
             prov.addFeatures(features)
             self.connectivity_layer.updateExtents()
+
+        conn_node = QgsProject.instance().layerTreeRoot().findLayer(self.connectivity_layer.id())
+        if conn_node:
+            conn_node.setItemVisibilityChecked(True)
         
         # Calculate or reuse global width ranges for consistent animation
         if self.connectivity_width_ranges is None:
             self.connectivity_width_ranges = self._calculate_global_width_ranges()
         
-        # Apply width-based graduated symbology with directional arrows at destination
+        # Apply width-based graduated symbology (plain lines, no arrows)
         if self.connectivity_width_ranges:
             from qgis.PyQt.QtGui import QColor
-            from qgis.PyQt.QtCore import Qt
             from qgis.core import (
                 QgsLineSymbol,
-                QgsMarkerLineSymbolLayer,
-                QgsSimpleMarkerSymbolLayer,
-                QgsMarkerSymbol,
             )
 
             base_color = QColor(CONNECTIVITY_COLOR)
 
-            ranges = []
-            for i, (lower, upper, width) in enumerate(self.connectivity_width_ranges):
-                # Create a line symbol for this width class
-                line_sym = QgsLineSymbol()
+            # Keep renderer classes stable through animation by rebuilding only
+            # when global width ranges change.
+            signature = tuple(
+                (round(lower, 12), round(upper, 12), round(width, 12))
+                for lower, upper, width in self.connectivity_width_ranges
+            )
+            needs_renderer = (
+                self.connectivity_layer.renderer() is None
+                or getattr(self, "_connectivity_renderer_signature", None) != signature
+            )
 
-                # Configure the base line layer (width and colour)
-                line_layer = line_sym.symbolLayer(0)
-                line_layer.setWidth(width)
-                line_layer.setColor(base_color)
+            if needs_renderer:
+                ranges = []
+                for lower, upper, width in self.connectivity_width_ranges:
+                    line_sym = QgsLineSymbol()
+                    line_layer = line_sym.symbolLayer(0)
+                    line_layer.setWidth(width)
+                    line_layer.setColor(base_color)
 
-                # Add a directional arrowhead at the last vertex of each arc.
-                # The last vertex is the *destination* reach – "where sediment goes to".
-                try:
-                    arrow_marker = QgsSimpleMarkerSymbolLayer()
-                    # Shape 7 = Arrow in QGIS's marker shape enum.
-                    # Try the newer enum-based API first; fall back to the integer
-                    # value for older QGIS 3.x releases.
-                    try:
-                        arrow_marker.setShape(QgsSimpleMarkerSymbolLayer.Shape.Arrow)
-                    except AttributeError:
-                        arrow_marker.setShape(7)
-                    arrow_marker.setSize(max(2.0, width * 2.5))
-                    arrow_marker.setColor(base_color)
-                    try:
-                        arrow_marker.setStrokeStyle(Qt.PenStyle.NoPen)
-                    except AttributeError:
-                        arrow_marker.setStrokeStyle(Qt.NoPen)
+                    # Format label based on magnitude
+                    if lower < 0.01:
+                        label = f"{lower:.2e}–{upper:.2e} m³"
+                    elif lower < 1:
+                        label = f"{lower:.3f}–{upper:.3f} m³"
+                    elif lower < 1000:
+                        label = f"{lower:.1f}–{upper:.1f} m³"
+                    else:
+                        label = f"{lower:.2g}–{upper:.2g} m³"
 
-                    arrow_sym = QgsMarkerSymbol()
-                    arrow_sym.changeSymbolLayer(0, arrow_marker)
+                    ranges.append(QgsRendererRange(lower, upper, line_sym, label))
 
-                    marker_line = QgsMarkerLineSymbolLayer()
-                    # Place the arrowhead at the line end-point (= destination reach)
-                    try:
-                        marker_line.setPlacement(QgsMarkerLineSymbolLayer.Placement.LastVertex)
-                    except AttributeError:
-                        try:
-                            marker_line.setPlacement(QgsMarkerLineSymbolLayer.LastVertex)
-                        except AttributeError:
-                            marker_line.setPlacement(5)  # LastVertex integer fallback
-                    marker_line.setRotateMarker(True)  # Rotate arrow to follow line direction
-                    marker_line.setSubSymbol(arrow_sym)
-
-                    line_sym.appendSymbolLayer(marker_line)
-                except Exception:
-                    pass  # Graceful fallback: render as plain line without arrow
-
-                # Format label based on magnitude
-                if lower < 0.01:
-                    label = f"{lower:.2e}–{upper:.2e} m³"
-                elif lower < 1:
-                    label = f"{lower:.3f}–{upper:.3f} m³"
-                elif lower < 1000:
-                    label = f"{lower:.1f}–{upper:.1f} m³"
-                else:
-                    label = f"{lower:.2g}–{upper:.2g} m³"
-
-                ranges.append(QgsRendererRange(lower, upper, line_sym, label))
-
-            renderer = QgsGraduatedSymbolRenderer("volume", ranges)
-            renderer.setMode(QgsGraduatedSymbolRenderer.Custom)
-            self.connectivity_layer.setRenderer(renderer)
+                renderer = QgsGraduatedSymbolRenderer("volume", ranges)
+                renderer.setMode(QgsGraduatedSymbolRenderer.Custom)
+                self.connectivity_layer.setRenderer(renderer)
+                self._connectivity_renderer_signature = signature
         
         self.connectivity_layer.triggerRepaint()
         self.canvas.refresh()
@@ -908,14 +888,25 @@ class DCascadePlugin:
             self.connectivity_width_ranges = None
             # Show connectivity layer and update it
             if self.connectivity_layer:
-                self.connectivity_layer.setVisible(True)
+                self._set_layer_visibility(self.connectivity_layer, True)
             self.update_connectivity_curves(self.current_time_step)
         else:
             # Hide connectivity layer
             if self.connectivity_layer:
-                self.connectivity_layer.setVisible(False)
+                self._set_layer_visibility(self.connectivity_layer, False)
         
         self.canvas.refresh()
+
+    def _set_layer_visibility(self, layer, visible):
+        """Set layer visibility through the layer tree (QGIS 3/4 compatible)."""
+        if layer is None:
+            return
+        try:
+            node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
+            if node is not None:
+                node.setItemVisibilityChecked(bool(visible))
+        except Exception:
+            pass
     
     def graph_reach(self, reach_idx):
         """Graph a specific reach in results viewer."""
