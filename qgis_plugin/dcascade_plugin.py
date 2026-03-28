@@ -248,6 +248,13 @@ class DCascadePlugin:
             self.run_action.triggered.connect(self.run_simulation)
             self.iface.addToolBarIcon(self.run_action)
     
+    _REQUIRED_LAYER_FIELDS = ['FromN', 'ToN']
+
+    def _missing_required_fields(self, layer):
+        """Return a list of required field names absent from *layer*."""
+        field_names = [field.name() for field in layer.fields()]
+        return [f for f in self._REQUIRED_LAYER_FIELDS if f not in field_names]
+
     def on_layer_selected(self, layer):
         """Handle network layer selection."""
         if layer is None:
@@ -270,24 +277,21 @@ class DCascadePlugin:
         if self.results_viewer_dock:
             self.results_viewer_dock.set_network_layer(layer)
         
-        # Validate required fields
-        field_names = [field.name() for field in layer.fields()]
-        required = ['FromN', 'ToN']
-        missing = [f for f in required if f not in field_names]
-        
+        # Log the selected layer; field validation is shown in the inputs tab
+        # label and enforced when the user runs the simulation via collect_config.
+        missing = self._missing_required_fields(layer)
         if missing:
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                "Missing Fields",
-                f"Layer is missing required fields: {', '.join(missing)}"
+            QgsMessageLog.logMessage(
+                f"Network layer '{layer.name()}' is missing required fields: {', '.join(missing)}",
+                "D-CASCADE",
+                Qgis.Warning
             )
-            return
-        
-        QgsMessageLog.logMessage(
-            f"Network layer selected: {layer.name()}",
-            "D-CASCADE",
-            Qgis.Info
-        )
+        else:
+            QgsMessageLog.logMessage(
+                f"Network layer selected: {layer.name()}",
+                "D-CASCADE",
+                Qgis.Info
+            )
     
     def on_map_selection_changed(self):
         """Handle map canvas feature selection change.
@@ -927,6 +931,16 @@ class DCascadePlugin:
                 self.iface.mainWindow(),
                 "No Layer",
                 "Please select a network layer first."
+            )
+            return None
+        
+        # Validate that the chosen layer has the required fields
+        missing = self._missing_required_fields(layer)
+        if missing:
+            QMessageBox.warning(
+                self.iface.mainWindow(),
+                "Missing Fields",
+                f"The selected layer '{layer.name()}' is missing required fields: {', '.join(missing)}"
             )
             return None
         
