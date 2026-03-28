@@ -131,5 +131,147 @@ def test_numpy_scalar_types():
         assert loaded_data['bool_val'] is True
 
 
+# ---------------------------------------------------------------------------
+# Tests for results_to_spreadsheet
+# ---------------------------------------------------------------------------
+
+import pytest
+
+pytest.importorskip("pandas")
+pytest.importorskip("openpyxl")
+
+from json_serializer import results_to_spreadsheet  # noqa: E402  (after importorskip)
+
+
+def test_spreadsheet_creates_file():
+    """results_to_spreadsheet creates an .xlsx file."""
+    data_output = {
+        'Volume out [m^3]': np.random.rand(10, 5).astype(np.float32),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path)
+        assert xlsx_path.exists()
+
+
+def test_spreadsheet_sheet_per_2d_variable():
+    """Each 2-D variable produces exactly one sheet."""
+    import openpyxl
+
+    data_output = {
+        'Volume out [m^3]': np.random.rand(10, 5).astype(np.float32),
+        'Volume in [m^3]': np.random.rand(10, 5).astype(np.float32),
+        'Sediment budget [m^3]': np.random.rand(10, 5).astype(np.float32),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        # Three variables → three sheets
+        assert len(wb.sheetnames) == 3
+
+
+def test_spreadsheet_sheet_per_3d_class():
+    """A 3-D variable (time × reach × class) produces one sheet per class."""
+    import openpyxl
+
+    n_classes = 4
+    data_output = {
+        'Volume out per grain sizes [m^3]': np.random.rand(10, 5, n_classes).astype(np.float32),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        assert len(wb.sheetnames) == n_classes
+
+
+def test_spreadsheet_reach_ids_as_columns():
+    """Custom reach IDs appear as column headers in the sheet."""
+    import openpyxl
+
+    reach_ids = [10, 20, 30]
+    data_output = {
+        'Volume out [m^3]': np.ones((5, 3), dtype=np.float64),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path, reach_ids=reach_ids)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        # Row 1 = header; columns B, C, D should carry "Reach 10", "Reach 20", "Reach 30"
+        headers = [ws.cell(row=1, column=c).value for c in range(2, 5)]
+        assert headers == ["Reach 10", "Reach 20", "Reach 30"]
+
+
+def test_spreadsheet_values_correct():
+    """Values written to the sheet match the original numpy array."""
+    import openpyxl
+
+    arr = np.arange(12, dtype=np.float64).reshape(3, 4)
+    data_output = {'Test variable': arr}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        # Data starts at row 2 (row 1 = header), column 2 (column 1 = index)
+        for r in range(arr.shape[0]):
+            for c in range(arr.shape[1]):
+                cell_val = ws.cell(row=r + 2, column=c + 2).value
+                assert cell_val == pytest.approx(arr[r, c])
+
+
+def test_spreadsheet_with_extended_output():
+    """Extended output variables are also written to the workbook."""
+    import openpyxl
+
+    data_output = {
+        'Volume out [m^3]': np.random.rand(10, 3).astype(np.float32),
+    }
+    extended_output = {
+        'Qbi_dep [m^3]': np.random.rand(10, 3).astype(np.float32),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path, extended_output=extended_output)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        # One sheet from data_output + one from extended_output
+        assert len(wb.sheetnames) == 2
+
+
+def test_spreadsheet_non_array_keys_skipped():
+    """Non-array entries (e.g., 'Simulation parameters') are silently skipped."""
+    import openpyxl
+
+    data_output = {
+        'Simulation parameters': {'psi': [-6, -5], 'ts_length': 86400},
+        'Volume out [m^3]': np.random.rand(5, 3).astype(np.float32),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = Path(tmpdir) / 'results.xlsx'
+        results_to_spreadsheet(data_output, xlsx_path)
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        # Only the array variable produces a sheet
+        assert len(wb.sheetnames) == 1
+
+
+def test_spreadsheet_suffix_added_automatically():
+    """If the given path has no .xlsx extension, it is added automatically."""
+    data_output = {
+        'Volume out [m^3]': np.random.rand(5, 3).astype(np.float32),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        no_ext_path = Path(tmpdir) / 'results'
+        results_to_spreadsheet(data_output, no_ext_path)
+        assert (Path(tmpdir) / 'results.xlsx').exists()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

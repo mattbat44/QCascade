@@ -22,7 +22,7 @@ from pathlib import Path
 src_path = Path(__file__).parent.parent / 'src'
 sys.path.insert(0, str(src_path))
 
-from json_serializer import load_from_json, save_to_json
+from json_serializer import load_from_json, save_to_json, results_to_spreadsheet
 
 from .results_viewer.time_series_tab import TimeSeriesTab
 from .results_viewer.spatial_tab import SpatialTab
@@ -107,6 +107,15 @@ class ResultsViewerDock(QDockWidget):
         )
         self.load_q_btn.clicked.connect(self.load_discharge_csv)
         toolbar_layout.addWidget(self.load_q_btn)
+
+        self.export_xlsx_btn = QPushButton("Export to Spreadsheet")
+        self.export_xlsx_btn.setToolTip(
+            "Export all loaded results to an Excel workbook (.xlsx). "
+            "Each variable is saved to a dedicated sheet."
+        )
+        self.export_xlsx_btn.setEnabled(False)
+        self.export_xlsx_btn.clicked.connect(self.export_to_spreadsheet)
+        toolbar_layout.addWidget(self.export_xlsx_btn)
 
         toolbar_layout.addStretch()
         
@@ -445,6 +454,54 @@ class ResultsViewerDock(QDockWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load discharge CSV: {str(e)}")
 
+    def export_to_spreadsheet(self):
+        """Export all loaded results to an Excel workbook chosen by the user."""
+        if self.results_data is None:
+            QMessageBox.warning(self, "No Results", "Please load results before exporting.")
+            return
+
+        default_name = ""
+        if self.results_path:
+            default_name = str(Path(self.results_path).with_suffix(".xlsx"))
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Results to Spreadsheet",
+            default_name,
+            "Excel Workbook (*.xlsx);;All Files (*)",
+        )
+
+        if not file_path:
+            return
+
+        try:
+            reach_ids = self.reach_ids if self.reach_ids else None
+            results_to_spreadsheet(
+                self.results_data,
+                file_path,
+                extended_output=self.results_data_ext,
+                reach_ids=reach_ids,
+            )
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"Results exported to:\n{file_path}",
+            )
+            QgsMessageLog.logMessage(
+                f"Results exported to spreadsheet: {file_path}",
+                "D-CASCADE",
+                Qgis.Info,
+            )
+        except ImportError:
+            QMessageBox.critical(
+                self,
+                "Missing Dependency",
+                "Exporting to spreadsheet requires 'pandas' and 'openpyxl'.\n"
+                "Install them with: pip install pandas openpyxl",
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", f"Could not export results:\n{str(e)}")
+
     def update_ui_with_results(self):
         """Update controls and cached metadata after loading results."""
         if self.results_data is None:
@@ -456,6 +513,9 @@ class ResultsViewerDock(QDockWidget):
             f"Loaded: {Path(self.results_path).name if self.results_path else 'Unknown'} | "
             f"Variables: {len(available_vars)}"
         )
+
+        # Enable spreadsheet export now that results are available
+        self.export_xlsx_btn.setEnabled(True)
 
         # Cache data ranges for dynamic plots
         self.data_ranges = {}
