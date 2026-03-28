@@ -88,7 +88,11 @@ class AnimationTab(QWidget):
         
         self.connectivity_check = QCheckBox("Show connectivity curves")
         self.connectivity_check.setChecked(False)
-        self.connectivity_check.setToolTip("Display animated arcs showing sediment transport between reaches")
+        self.connectivity_check.setToolTip(
+            "Display animated arcs showing where sediment goes to: "
+            "each arc starts at the reach where sediment is mobilised and ends "
+            "(with an arrowhead) at the downstream reach where it deposits."
+        )
         connectivity_layout.addWidget(self.connectivity_check)
         
         connectivity_group.setLayout(connectivity_layout)

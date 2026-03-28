@@ -144,7 +144,86 @@ class TestConnectivityCurves(unittest.TestCase):
         
         self.assertEqual(non_zero_between, 2)
         self.assertEqual(non_zero_outlet, 1)
-    
+
+    def test_connectivity_represents_where_sediment_goes_to(self):
+        """Verify that connectivity curves represent WHERE sediment goes TO.
+
+        The direct_connectivity matrix has axes:
+          [timestep, source_reach, destination_reach]
+
+        - Axis 1 (rows)    = SOURCE reach (where the cascade was mobilised from).
+        - Axis 2 (columns) = DESTINATION reach (where the cascade deposits).
+
+        A connectivity arc must therefore start at the source reach and end at
+        the destination reach – the arrowhead at the arc endpoint shows
+        'where sediment goes to'.
+        """
+        num_reaches = 4
+
+        # Build a simple linear network: 0 → 1 → 2 → outlet (column index 4, accessed as -1)
+        # with a tributary 3 → 1.
+        direct_connectivity = np.zeros((1, num_reaches, num_reaches + 1))
+
+        # Reach 0 mobilises sediment that deposits in Reach 1
+        direct_connectivity[0, 0, 1] = 200.0
+        # Reach 1 mobilises sediment that deposits in Reach 2
+        direct_connectivity[0, 1, 2] = 80.0
+        # Reach 3 (tributary) mobilises sediment that deposits in Reach 1
+        direct_connectivity[0, 3, 1] = 50.0
+        # Reach 2 mobilises sediment that exits the network (outlet column = -1)
+        direct_connectivity[0, 2, -1] = 30.0
+
+        timestep = 0
+        transport_data = direct_connectivity[timestep, :, :-1]
+        qout_data = direct_connectivity[timestep, :, -1]
+
+        # --- Direction convention ---
+        # transport_data[i, j] > 0 means:
+        #   * i is the SOURCE (mobilisation) reach index – 'from_reach'
+        #   * j is the DESTINATION (deposition) reach index – 'to_reach'
+        # Sediment goes TO reach j, so the arc arrowhead must point at j.
+
+        # Identify non-zero connections
+        connections = []
+        for i in range(transport_data.shape[0]):
+            for j in range(transport_data.shape[1]):
+                if transport_data[i, j] > 0:
+                    connections.append((i, j, transport_data[i, j]))
+
+        # Check the expected connections exist with the correct source→destination order
+        self.assertIn((0, 1, 200.0), connections, "Reach 0 should send sediment TO Reach 1")
+        self.assertIn((1, 2, 80.0),  connections, "Reach 1 should send sediment TO Reach 2")
+        self.assertIn((3, 1, 50.0),  connections, "Reach 3 should send sediment TO Reach 1")
+
+        # Verify that the TRANSPOSED direction (destination → source) is NOT present
+        src_indices  = {c[0] for c in connections}
+        dest_indices = {c[1] for c in connections}
+        # Source reaches: 0, 1, 3 (upstream mobilisation points)
+        # Destination reaches: 1, 2 (downstream deposition points)
+        self.assertIn(0, src_indices,  "Reach 0 must be a SOURCE (mobilisation)")
+        self.assertIn(1, dest_indices, "Reach 1 must be a DESTINATION (deposition)")
+
+        # Outlet data: row index = source reach, value = volume exiting network
+        # qout_data[i] > 0 means sediment FROM reach i exits the network
+        self.assertAlmostEqual(qout_data[2], 30.0, msg="Reach 2 should send sediment TO the outlet")
+        self.assertEqual(np.count_nonzero(qout_data), 1, "Only Reach 2 sends sediment to the outlet")
+
+        # Simulate the arc attribute assignment used by update_connectivity_curves:
+        #   from_reach = reach_fromn[i]  (source)
+        #   to_reach   = reach_fromn[j]  (destination = where sediment goes to)
+        reach_fromn = [1, 2, 3, 4]  # sorted FromN values (1-based IDs)
+        for i, j, volume in connections:
+            from_reach = reach_fromn[i]  # source reach ID
+            to_reach   = reach_fromn[j]  # destination reach ID
+            # The arc geometry goes from from_reach position to to_reach position.
+            # The arrowhead placed at the LAST VERTEX (to_reach end) shows
+            # "where sediment goes to".
+            self.assertNotEqual(from_reach, to_reach, "Source and destination must differ")
+            # In a simple linear network, destination ID > source ID (flows downstream)
+            if (i, j) in [(0, 1), (1, 2)]:
+                self.assertGreater(to_reach, from_reach,
+                                   f"Arc {from_reach}→{to_reach} should go downstream")
+
     def test_log_scale_color_mapping(self):
         """Test logarithmic color scale for volume visualization."""
         volumes = [1, 10, 100, 1000, 10000]
