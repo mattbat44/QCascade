@@ -1,6 +1,6 @@
 """
 @brief Tabbed dock widget for D-CASCADE parameters and configuration
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from qgis.PyQt.QtWidgets import (

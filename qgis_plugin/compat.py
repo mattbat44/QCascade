@@ -4,7 +4,7 @@
 This module provides a unified interface for Qt symbols and types that changed
 between PyQt5 (used by QGIS 3.x) and PyQt6 (used by QGIS 4.0).
 
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from qgis.PyQt.QtCore import Qt, PYQT_VERSION_STR

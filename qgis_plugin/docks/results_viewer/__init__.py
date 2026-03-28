@@ -1,6 +1,6 @@
 """
 @brief Results viewer dock components package
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from .time_series_tab import TimeSeriesTab

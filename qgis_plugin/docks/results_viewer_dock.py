@@ -1,6 +1,6 @@
 """
 @brief Dock widget for viewing and analyzing D-CASCADE simulation results
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from qgis.PyQt.QtWidgets import (

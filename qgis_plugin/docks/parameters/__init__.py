@@ -1,6 +1,6 @@
 """
 @brief Parameters dock components package
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from .inputs_tab import InputsTab

@@ -13,7 +13,7 @@ when available.
 Requirements:
     pip install pandas openpyxl
 
-@author: D-CASCADE Team
+@author: Matt Adams
 """
 
 import os

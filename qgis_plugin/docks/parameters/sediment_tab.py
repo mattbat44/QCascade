@@ -1,6 +1,6 @@
 """
 @brief Sediment parameters tab component for D-CASCADE parameters dock
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from qgis.PyQt.QtWidgets import (

@@ -2,6 +2,34 @@
 
 QGIS plugin version of the D-CASCADE sediment transport modeling framework.
 
+## Scope and Purpose
+
+This repository provides a QGIS-based interface and workflow for running D-CASCADE and viewing results in a simple user environment.
+
+Important: this codebase does not modify the core scientific D-CASCADE model logic developed by the original teams. It is an integration and usability layer (setup, configuration, execution, and visualization) around that existing model work.
+
+## Academic Credit and Citation
+
+Please credit the original D-CASCADE model creators and the Python implementation team when using this plugin in research outputs.
+
+- Original D-CASCADE model (MATLAB):
+   - Repository: https://github.com/mtangi/DCASCADEmodel
+   - Paper: https://doi.org/10.1029/2021WR030784
+
+- D-CASCADE Python implementation used by this repository:
+   - Repository: https://github.com/dcascade-py/dcascade-py
+   - Paper: Doolaeghe et al. (in prep)
+
+This plugin repository does not alter those underlying model formulations; it provides a practical environment to run simulations and inspect outputs.
+
+## Quick Start
+
+1. Install the plugin (recommended: Basic Installation below).
+2. Enable D-CASCADE in QGIS.
+3. Load a valid river network layer and discharge input.
+4. Configure parameters in the Parameters dock.
+5. Run simulation and inspect outputs in the Results Viewer.
+
 ## Installation
 
 ### Basic Installation (Recommended for most users)

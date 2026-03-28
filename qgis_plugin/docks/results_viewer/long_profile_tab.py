@@ -1,6 +1,6 @@
 """
 @brief Long profile visualization tab component for D-CASCADE results viewer
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from qgis.PyQt.QtWidgets import (

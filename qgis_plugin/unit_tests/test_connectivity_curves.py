@@ -1,6 +1,6 @@
 """
 @brief Unit tests for connectivity curves implementation
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 import unittest

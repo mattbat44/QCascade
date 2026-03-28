@@ -1,6 +1,6 @@
 """
 @brief D-CASCADE QGIS Plugin main class
-@author D-CASCADE Team
+@author Matt Adams
 """
 
 from qgis.PyQt.QtCore import Qt, QSettings
