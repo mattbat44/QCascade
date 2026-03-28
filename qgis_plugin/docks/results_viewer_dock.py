@@ -26,10 +26,8 @@ from json_serializer import load_from_json, save_to_json
 
 from .results_viewer.time_series_tab import TimeSeriesTab
 from .results_viewer.spatial_tab import SpatialTab
-from .results_viewer.connectivity_tab import ConnectivityTab
 from .results_viewer.long_profile_tab import LongProfileTab
 from .results_viewer.animation_tab import AnimationTab
-from .results_viewer.stats_tab import StatsTab
 
 
 class ResultsViewerDock(QDockWidget):
@@ -122,18 +120,14 @@ class ResultsViewerDock(QDockWidget):
         # Create tab components
         self.time_series_tab = TimeSeriesTab(self)
         self.spatial_tab = SpatialTab(self)
-        self.connectivity_tab = ConnectivityTab(self)
         self.long_profile_tab = LongProfileTab(self)
         self.animation_tab = AnimationTab(self)
-        self.stats_tab = StatsTab(self)
         
         # Add tabs to widget
         self.tab_widget.addTab(self.time_series_tab, "Time Series")
-        self.tab_widget.addTab(self.spatial_tab, "Spatial Analysis")
-        self.tab_widget.addTab(self.connectivity_tab, "Connectivity")
+        self.tab_widget.addTab(self.spatial_tab, "Reach breakdown")
         self.tab_widget.addTab(self.long_profile_tab, "Long Profile")
         self.tab_widget.addTab(self.animation_tab, "Animation")
-        self.tab_widget.addTab(self.stats_tab, "Statistics")
         
         self.main_layout.addWidget(self.tab_widget)
 
@@ -159,9 +153,6 @@ class ResultsViewerDock(QDockWidget):
         self.spatial_tab.plot_btn.clicked.connect(self.update_spatial_plot)
 
         # Connect signals from other tabs
-        self.connectivity_tab.conn_variable_combo.currentTextChanged.connect(self.update_connectivity_plot)
-        self.connectivity_tab.plot_btn.clicked.connect(self.update_connectivity_plot)
-        
         self.long_profile_tab.lp_update_btn.clicked.connect(lambda: self.update_long_profile_plot(use_slider=False))
         self.long_profile_tab.lp_time_slider.valueChanged.connect(self.on_lp_time_slider_changed)
         
@@ -184,7 +175,6 @@ class ResultsViewerDock(QDockWidget):
         self.spatial_agg_combo = self.spatial_tab.spatial_agg_combo
         self.spatial_year_spin = self.spatial_tab.spatial_year_spin
         self.spatial_yearly_check = self.spatial_tab.spatial_yearly_check
-        self.conn_variable_combo = self.connectivity_tab.conn_variable_combo
         self.lp_update_btn = self.long_profile_tab.lp_update_btn
         self.lp_time_slider = self.long_profile_tab.lp_time_slider
         self.lp_time_label = self.long_profile_tab.lp_time_label
@@ -196,7 +186,6 @@ class ResultsViewerDock(QDockWidget):
         self.play_btn = self.animation_tab.play_btn
         self.frame_duration_spin = self.animation_tab.frame_duration_spin
         self.connectivity_check = self.animation_tab.connectivity_check
-        self.stats_label = self.stats_tab.stats_label
 
         self.show_empty_plot()
 
@@ -213,10 +202,8 @@ class ResultsViewerDock(QDockWidget):
             self.update_time_series_plot()
         elif tab == "Animation":
             self.update_dynamic_plot()
-        elif tab == "Spatial Analysis":
+        elif tab == "Reach breakdown":
             self.update_spatial_plot()
-        elif tab == "Connectivity":
-            self.update_connectivity_plot()
         elif tab == "Long Profile":
             self.update_long_profile_plot(use_slider=True)
 
@@ -538,32 +525,6 @@ class ResultsViewerDock(QDockWidget):
             self.time_slider.setEnabled(True)
             self.time_label.setText(f"0 / {num_timesteps - 1}")
             self.play_btn.setEnabled(True)
-
-        # Populate statistics variable list
-        if hasattr(self, "stats_tab"):
-            self.stats_tab.var_combo.clear()
-            all_vars = []
-            if self.results_data:
-                all_vars.extend(
-                    sorted(
-                        [
-                            k
-                            for k, v in self.results_data.items()
-                            if isinstance(v, np.ndarray)
-                        ]
-                    )
-                )
-            if self.results_data_ext:
-                all_vars.extend(
-                    sorted(
-                        [
-                            k
-                            for k, v in self.results_data_ext.items()
-                            if isinstance(v, np.ndarray)
-                        ]
-                    )
-                )
-            self.stats_tab.var_combo.addItems(all_vars)
 
         # Generate an initial plot
         self.update_time_series_plot()
@@ -932,50 +893,6 @@ class ResultsViewerDock(QDockWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
     
-    def update_connectivity_plot(self):
-        """Update connectivity heatmap (Time vs Reach)."""
-        if self.results_data is None:
-            return
-        
-        try:
-            variable = self.conn_variable_combo.currentText()
-            if variable not in self.results_data:
-                return
-            
-            data = self.results_data[variable]
-            # data shape: (time, reach)
-            
-            self.figure.clear()
-            ax = self.figure.add_subplot(111)
-            
-            # Plot heatmap
-            # x: Reach, y: Time
-            im = ax.imshow(data, aspect='auto', cmap='viridis', origin='lower')
-            
-            ax.set_title(f"{variable} - Spatiotemporal Heatmap")
-            ax.set_xlabel("Reach Index")
-            ax.set_ylabel("Time Step")
-            
-            cbar = self.figure.colorbar(im, ax=ax)
-            cbar.set_label(variable)
-            
-            self._apply_plot_margins()
-            self.canvas.draw()
-            if self.canvas_dock:
-                self.canvas_dock.show()
-            try:
-                self.pane_state_changed.emit(
-                    "connectivity",
-                    {
-                        "variable": variable,
-                    },
-                )
-            except Exception:
-                pass
-                
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to plot: {str(e)}")
-
     def animate_results(self):
         """Animate through time steps."""
         from qgis.PyQt.QtCore import QTimer
