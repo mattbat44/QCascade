@@ -725,27 +725,66 @@ class DCascadePlugin:
         if self.connectivity_width_ranges is None:
             self.connectivity_width_ranges = self._calculate_global_width_ranges()
         
-        # Apply width-based graduated symbology
+        # Apply width-based graduated symbology with directional arrows at destination
         if self.connectivity_width_ranges:
             from qgis.PyQt.QtGui import QColor
-            
-            symbol = QgsSymbol.defaultSymbol(self.connectivity_layer.geometryType())
+            from qgis.PyQt.QtCore import Qt
+            from qgis.core import (
+                QgsLineSymbol,
+                QgsMarkerLineSymbolLayer,
+                QgsSimpleMarkerSymbolLayer,
+                QgsMarkerSymbol,
+            )
+
             base_color = QColor(CONNECTIVITY_COLOR)
-            
+
             ranges = []
             for i, (lower, upper, width) in enumerate(self.connectivity_width_ranges):
-                sym = symbol.clone()
-                
-                # Set width based on class
+                # Create a line symbol for this width class
+                line_sym = QgsLineSymbol()
+
+                # Configure the base line layer (width and colour)
+                line_layer = line_sym.symbolLayer(0)
+                line_layer.setWidth(width)
+                line_layer.setColor(base_color)
+
+                # Add a directional arrowhead at the last vertex of each arc.
+                # The last vertex is the *destination* reach – "where sediment goes to".
                 try:
-                    if hasattr(sym, "setWidth"):
-                        sym.setWidth(width)
+                    arrow_marker = QgsSimpleMarkerSymbolLayer()
+                    # Shape 7 = Arrow in QGIS's marker shape enum.
+                    # Try the newer enum-based API first; fall back to the integer
+                    # value for older QGIS 3.x releases.
+                    try:
+                        arrow_marker.setShape(QgsSimpleMarkerSymbolLayer.Shape.Arrow)
+                    except AttributeError:
+                        arrow_marker.setShape(7)
+                    arrow_marker.setSize(max(2.0, width * 2.5))
+                    arrow_marker.setColor(base_color)
+                    try:
+                        arrow_marker.setStrokeStyle(Qt.PenStyle.NoPen)
+                    except AttributeError:
+                        arrow_marker.setStrokeStyle(Qt.NoPen)
+
+                    arrow_sym = QgsMarkerSymbol()
+                    arrow_sym.changeSymbolLayer(0, arrow_marker)
+
+                    marker_line = QgsMarkerLineSymbolLayer()
+                    # Place the arrowhead at the line end-point (= destination reach)
+                    try:
+                        marker_line.setPlacement(QgsMarkerLineSymbolLayer.Placement.LastVertex)
+                    except AttributeError:
+                        try:
+                            marker_line.setPlacement(QgsMarkerLineSymbolLayer.LastVertex)
+                        except AttributeError:
+                            marker_line.setPlacement(5)  # LastVertex integer fallback
+                    marker_line.setRotateMarker(True)  # Rotate arrow to follow line direction
+                    marker_line.setSubSymbol(arrow_sym)
+
+                    line_sym.appendSymbolLayer(marker_line)
                 except Exception:
-                    pass
-                
-                # Use consistent color for all classes
-                sym.setColor(base_color)
-                
+                    pass  # Graceful fallback: render as plain line without arrow
+
                 # Format label based on magnitude
                 if lower < 0.01:
                     label = f"{lower:.2e}–{upper:.2e} m³"
@@ -755,9 +794,9 @@ class DCascadePlugin:
                     label = f"{lower:.1f}–{upper:.1f} m³"
                 else:
                     label = f"{lower:.2g}–{upper:.2g} m³"
-                
-                ranges.append(QgsRendererRange(lower, upper, sym, label))
-            
+
+                ranges.append(QgsRendererRange(lower, upper, line_sym, label))
+
             renderer = QgsGraduatedSymbolRenderer("volume", ranges)
             renderer.setMode(QgsGraduatedSymbolRenderer.Custom)
             self.connectivity_layer.setRenderer(renderer)
