@@ -1,5 +1,0 @@
-geopandas==1.1.1
-matplotlib>=3.10.8
-networkx==3.5
-numpy==2.3.2
-pandas==2.3.1

@@ -2,126 +2,202 @@
 # Install Q-Cascade QGIS Plugin for Development
 # Creates a symlink/junction from QGIS plugins directory to development directory
 # Uses the 'dcascade-testing' QGIS profile
+[CmdletBinding()]
+param(
+    [string]$ProfileName = "dcascade-testing",
+    [switch]$SkipDependencies
+)
 
 $ErrorActionPreference = "Stop"
 
-$pluginName = "dcascade"
-$profileName = "dcascade-testing"
-
-# Get the development directory (where this script is located)
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$devPath = Join-Path $scriptPath "qgis_plugin"
-
-# QGIS plugins path for the specified profile
-$qgisPluginsPath = "$env:APPDATA\QGIS\QGIS\profiles\$profileName\python\plugins\$pluginName"
-
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "Q-Cascade QGIS Plugin Development Setup" -ForegroundColor Cyan
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Development path: $devPath" -ForegroundColor Yellow
-Write-Host "QGIS profile: $profileName" -ForegroundColor Yellow
-Write-Host "Plugin target: $qgisPluginsPath" -ForegroundColor Yellow
-Write-Host ""
-
-# Verify development directory exists
-if (-not (Test-Path $devPath)) {
-    Write-Host "ERROR: Development directory not found: $devPath" -ForegroundColor Red
-    Write-Host "Please ensure you're running this script from the project root." -ForegroundColor Red
-    exit 1
+function Write-Section {
+    param([string]$Title)
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host $Title -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Cyan
 }
 
-# Verify plugin files exist
-$initFile = Join-Path $devPath "__init__.py"
-$metadataFile = Join-Path $devPath "metadata.txt"
+function Find-QgisPython {
+    $candidateQgisRoots = @(
+        "C:\Program Files\QGIS 3.40",
+        "C:\Program Files\QGIS 3.38",
+        "C:\Program Files\QGIS 3.34",
+        "C:\Program Files\QGIS*",
+        "C:\OSGeo4W64",
+        "C:\OSGeo4W"
+    )
 
-if (-not (Test-Path $initFile)) {
-    Write-Host "WARNING: __init__.py not found in $devPath" -ForegroundColor Yellow
-}
-
-if (-not (Test-Path $metadataFile)) {
-    Write-Host "WARNING: metadata.txt not found in $devPath" -ForegroundColor Yellow
-}
-
-# Check if symlink/junction already exists
-if (Test-Path $qgisPluginsPath) {
-    $existingItem = Get-Item $qgisPluginsPath -ErrorAction SilentlyContinue
-    
-    if ($existingItem.LinkType -eq "Junction" -or $existingItem.LinkType -eq "SymbolicLink") {
-        Write-Host "Found existing junction/symlink at: $qgisPluginsPath" -ForegroundColor Yellow
-        $response = Read-Host "Remove and recreate? (y/n)"
-        if ($response -eq 'y' -or $response -eq 'Y') {
-            Remove-Item $qgisPluginsPath -Force -Recurse
-            Write-Host "Removed existing link." -ForegroundColor Green
-        } else {
-            Write-Host "Aborted." -ForegroundColor Yellow
-            exit 0
-        }
-    } else {
-        Write-Host "WARNING: Directory exists at $qgisPluginsPath but is not a junction/symlink." -ForegroundColor Yellow
-        $response = Read-Host "Remove and create junction? (y/n)"
-        if ($response -eq 'y' -or $response -eq 'Y') {
-            Remove-Item $qgisPluginsPath -Force -Recurse
-            Write-Host "Removed existing directory." -ForegroundColor Green
-        } else {
-            Write-Host "Aborted." -ForegroundColor Yellow
-            exit 0
+    $roots = @()
+    foreach ($pattern in $candidateQgisRoots) {
+        if ($pattern.Contains("*")) {
+            $expanded = Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue
+            if ($expanded) {
+                $roots += $expanded.FullName
+            }
+        } elseif (Test-Path $pattern) {
+            $roots += $pattern
         }
     }
-}
 
-# Create directory structure if it doesn't exist
-$pluginsDir = Split-Path $qgisPluginsPath -Parent
-if (-not (Test-Path $pluginsDir)) {
-    Write-Host "Creating plugins directory: $pluginsDir" -ForegroundColor Cyan
-    New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
-}
+    $roots = $roots | Select-Object -Unique
 
-# Check if profile directory exists
-$profileDir = "$env:APPDATA\QGIS\QGIS3\profiles\$profileName"
-if (-not (Test-Path $profileDir)) {
-    Write-Host "" -ForegroundColor Yellow
-    Write-Host "WARNING: QGIS profile '$profileName' does not exist!" -ForegroundColor Yellow
-    Write-Host "Profile path: $profileDir" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "You can create this profile in QGIS:" -ForegroundColor Cyan
-    Write-Host "1. Open QGIS" -ForegroundColor Cyan
-    Write-Host "2. Settings -> User Profiles -> New Profile" -ForegroundColor Cyan
-    Write-Host "3. Name it dcascade-testing" -ForegroundColor Cyan
-    Write-Host ""
-    $response = Read-Host "Continue anyway? (y/n)"
-    if ($response -ne 'y' -and $response -ne 'Y') {
-        Write-Host "Aborted." -ForegroundColor Yellow
-        exit 0
+    foreach ($root in $roots) {
+        $pythonCandidates = @(
+            (Join-Path $root "apps\Python313\python.exe"),
+            (Join-Path $root "apps\Python312\python.exe"),
+            (Join-Path $root "apps\Python311\python.exe"),
+            (Join-Path $root "apps\Python310\python.exe"),
+            (Join-Path $root "apps\Python39\python.exe"),
+            (Join-Path $root "bin\python.exe")
+        )
+
+        foreach ($pythonPath in $pythonCandidates) {
+            if (Test-Path $pythonPath) {
+                return $pythonPath
+            }
+        }
     }
+
+    return $null
 }
 
-# Create junction (symlink for directories on Windows)
+function Install-Dependencies {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
+
+    $dependencies = @(
+        "numpy==1.26.4",
+        "geopandas==1.0.1",
+        "pandas==2.2.3",
+        "networkx==3.3",
+        "scipy==1.13.1",
+        "shapely>=2.0.0",
+        "matplotlib>=3.8.0",
+        "tqdm>=4.67.0",
+        "folium",
+        "plotly",
+        "pydantic",
+        "mapclassify",
+        "openpyxl>=3.1.5"
+    )
+
+    Write-Host "Using QGIS Python: $PythonExe" -ForegroundColor Yellow
+    & $PythonExe -m pip install --upgrade pip
+
+    foreach ($dep in $dependencies) {
+        Write-Host "Installing $dep ..." -ForegroundColor White
+        & $PythonExe -m pip install $dep
+    }
+
+    Write-Host "Dependency installation finished." -ForegroundColor Green
+}
+
+function Fetch-ModelFiles {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
+
+    $scriptRoot = Split-Path -Parent $MyInvocation.ScriptName
+    if (-not $scriptRoot) { $scriptRoot = $PSScriptRoot }
+    $fetchScript = Join-Path $scriptRoot "fetch_dcascade_model.py"
+
+    if (-not (Test-Path $fetchScript)) {
+        throw "fetch_dcascade_model.py not found at: $fetchScript"
+    }
+
+    Write-Host "Fetching upstream model files from dcascade-py v2.0.0 ..." -ForegroundColor Yellow
+    & $PythonExe $fetchScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "fetch_dcascade_model.py failed (exit code $LASTEXITCODE)."
+    }
+    Write-Host "Model files ready." -ForegroundColor Green
+}
+
 try {
-    Write-Host "Creating junction link..." -ForegroundColor Cyan
+    $pluginName = "dcascade"
+    $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $devPath = Join-Path $scriptPath "qgis_plugin"
+    $qgisPluginsPath = Join-Path $env:APPDATA "QGIS\QGIS3\profiles\$ProfileName\python\plugins\$pluginName"
+    $pluginsDir = Split-Path $qgisPluginsPath -Parent
+    $profileDir = Join-Path $env:APPDATA "QGIS\QGIS3\profiles\$ProfileName"
+
+    Write-Section "D-CASCADE Development Installer"
+    Write-Host "Development path: $devPath" -ForegroundColor Yellow
+    Write-Host "QGIS profile: $ProfileName" -ForegroundColor Yellow
+    Write-Host "Plugin target: $qgisPluginsPath" -ForegroundColor Yellow
+
+    if (-not (Test-Path $devPath)) {
+        throw "Development directory not found: $devPath"
+    }
+
+    $qgisProcesses = Get-Process -Name "qgis*" -ErrorAction SilentlyContinue
+    if ($qgisProcesses) {
+        throw "Please close QGIS before installation, then run this script again."
+    }
+
+    if (-not (Test-Path $profileDir)) {
+        Write-Host "" 
+        Write-Host "WARNING: QGIS profile '$ProfileName' does not exist yet." -ForegroundColor Yellow
+        Write-Host "Create it in QGIS via Settings -> User Profiles -> New Profile." -ForegroundColor Yellow
+        $response = Read-Host "Continue anyway? (y/n)"
+        if ($response -notin @("y", "Y")) {
+            Write-Host "Aborted." -ForegroundColor Yellow
+            exit 0
+        }
+    }
+
+    Write-Section "Step 1/3 - Link Plugin Source"
+    if (-not (Test-Path $pluginsDir)) {
+        New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
+    }
+
+    if (Test-Path $qgisPluginsPath) {
+        $existingItem = Get-Item $qgisPluginsPath -ErrorAction SilentlyContinue
+        if ($existingItem.LinkType -eq "Junction" -or $existingItem.LinkType -eq "SymbolicLink") {
+            Write-Host "Found existing junction/symlink at: $qgisPluginsPath" -ForegroundColor Yellow
+            $response = Read-Host "Remove and recreate? (y/n)"
+            if ($response -notin @("y", "Y")) {
+                Write-Host "Aborted." -ForegroundColor Yellow
+                exit 0
+            }
+        } else {
+            Write-Host "WARNING: Directory exists at $qgisPluginsPath but is not a junction/symlink." -ForegroundColor Yellow
+            $response = Read-Host "Remove and create junction? (y/n)"
+            if ($response -notin @("y", "Y")) {
+                Write-Host "Aborted." -ForegroundColor Yellow
+                exit 0
+            }
+        }
+        Remove-Item $qgisPluginsPath -Force -Recurse
+    }
+
     New-Item -ItemType Junction -Path $qgisPluginsPath -Target $devPath -Force | Out-Null
-    Write-Host ""
-    Write-Host "Success! Junction created successfully." -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Setup complete:" -ForegroundColor Cyan
-    Write-Host "  Source: $devPath" -ForegroundColor White
-    Write-Host "  Target: $qgisPluginsPath" -ForegroundColor White
-    Write-Host ""
+    Write-Host "Plugin junction created." -ForegroundColor Green
+
+    if (-not $SkipDependencies) {
+        Write-Section "Step 2/3 - Install Python Dependencies"
+        $pythonExe = Find-QgisPython
+        if (-not $pythonExe) {
+            throw "Could not find QGIS Python automatically. Install QGIS first, then re-run this script."
+        }
+        Install-Dependencies -PythonExe $pythonExe
+
+        Write-Section "Step 3/3 - Fetch Upstream Model Files"
+        Fetch-ModelFiles -PythonExe $pythonExe
+    } else {
+        Write-Section "Step 2/3 - Skipped"
+        Write-Host "Dependency installation skipped by request." -ForegroundColor Yellow
+        Write-Section "Step 3/3 - Skipped"
+        Write-Host "Model fetch skipped by request." -ForegroundColor Yellow
+    }
+
+    Write-Section "Installation Complete"
+    Write-Host "D-CASCADE dev setup is ready for profile '$ProfileName'." -ForegroundColor Green
     Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "1. Open QGIS with profile '$profileName'" -ForegroundColor White
-    Write-Host "2. Go to Plugins Manage and Install Plugins" -ForegroundColor White
-    Write-Host "3. Enable Q-Cascade plugin" -ForegroundColor White
-    Write-Host "4. For rapid development, install Plugin Reloader plugin" -ForegroundColor White
-    Write-Host "   (allows reloading plugin without restarting QGIS)" -ForegroundColor White
-    Write-Host ""
+    Write-Host "1. Open QGIS with profile '$ProfileName'" -ForegroundColor White
+    Write-Host "2. Enable D-CASCADE in Plugins -> Manage and Install Plugins" -ForegroundColor White
+    Write-Host "3. Optional: install Plugin Reloader for fast plugin reloads" -ForegroundColor White
 } catch {
     Write-Host ""
-    Write-Host "ERROR: Failed to create junction: $_" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Troubleshooting:" -ForegroundColor Yellow
-    Write-Host "- Run PowerShell as Administrator" -ForegroundColor Yellow
-    Write-Host "- Check that target directory exists: $devPath" -ForegroundColor Yellow
-    Write-Host "- Check that plugins directory exists: $pluginsDir" -ForegroundColor Yellow
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 

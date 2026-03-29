@@ -24,3 +24,24 @@ dcascade-qgis-env/
 
 
 outputs/
+
+# ---------------------------------------------------------------------------
+# Upstream model files fetched from dcascade-py/dcascade-py v2.0.0.
+# These are NOT stored in this repository.
+# Run `python fetch_dcascade_model.py` once after cloning to download them.
+# ---------------------------------------------------------------------------
+qgis_plugin/src/GSD_curvefit.py
+qgis_plugin/src/cascade.py
+qgis_plugin/src/constants.py
+qgis_plugin/src/d_finder.py
+qgis_plugin/src/flow_depth.py
+qgis_plugin/src/plot_function.py
+qgis_plugin/src/preprocessing.py
+qgis_plugin/src/reach_data.py
+qgis_plugin/src/slope_reduction.py
+qgis_plugin/src/transport_capacity_calculator.py
+qgis_plugin/src/width_variation.py
+qgis_plugin/src/widget.py
+
+# egg-info build artefacts
+qgis_plugin/src/*.egg-info/

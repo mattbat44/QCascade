@@ -127,6 +127,25 @@ function Install-Dependencies {
     Write-Host "Dependency installation finished." -ForegroundColor Green
 }
 
+function Fetch-ModelFiles {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
+
+    $scriptRoot = Split-Path -Parent $MyInvocation.ScriptName
+    if (-not $scriptRoot) { $scriptRoot = $PSScriptRoot }
+    $fetchScript = Join-Path $scriptRoot "fetch_dcascade_model.py"
+
+    if (-not (Test-Path $fetchScript)) {
+        throw "fetch_dcascade_model.py not found at: $fetchScript"
+    }
+
+    Write-Host "Fetching upstream model files from dcascade-py v2.0.0 …" -ForegroundColor Yellow
+    & $PythonExe $fetchScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "fetch_dcascade_model.py failed (exit code $LASTEXITCODE)."
+    }
+    Write-Host "Model files ready." -ForegroundColor Green
+}
+
 try {
     Write-Section "Q-Cascade Basic User Installer"
 
@@ -135,17 +154,22 @@ try {
         throw "Please close QGIS before installation, then run this script again."
     }
 
-    Write-Section "Step 1/2 - Install Plugin Files"
-    Install-PluginFiles
-
-    Write-Section "Step 2/2 - Install Python Dependencies"
+    Write-Section "Step 1/4 - Detect QGIS Python"
     $pythonExe = Find-QgisPython
 
     if (-not $pythonExe) {
         throw "Could not find QGIS Python automatically. Install QGIS first, then re-run this script."
     }
 
+    Write-Section "Step 2/4 - Install Python Dependencies"
+
     Install-Dependencies -PythonExe $pythonExe
+
+    Write-Section "Step 3/4 - Fetch Upstream Model Files"
+    Fetch-ModelFiles -PythonExe $pythonExe
+
+    Write-Section "Step 4/4 - Install Plugin Files"
+    Install-PluginFiles
 
     Write-Section "Installation Complete"
     Write-Host "Q-Cascade is installed for the default QGIS profile." -ForegroundColor Green
