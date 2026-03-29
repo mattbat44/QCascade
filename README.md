@@ -1,6 +1,6 @@
-# D-CASCADE QGIS Plugin
+# Q-Cascade QGIS Plugin
 
-QGIS plugin version of the D-CASCADE sediment transport modeling framework.
+Q-Cascade is the QGIS plugin for the D-CASCADE sediment transport modeling framework.
 
 ## Scope and Purpose
 
@@ -25,7 +25,7 @@ This plugin repository does not alter those underlying model formulations; it pr
 ## Quick Start
 
 1. Install the plugin (recommended: Basic Installation below).
-2. Enable D-CASCADE in QGIS.
+2. Enable Q-Cascade in QGIS.
 3. Load a valid river network layer and discharge input.
 4. Configure parameters in the Parameters dock.
 5. Run simulation and inspect outputs in the Results Viewer.
@@ -40,7 +40,7 @@ This is a one-click installer for non-developers.
 2. In this project folder, double-click `install.bat`.
 3. Wait for completion.
 4. Start QGIS.
-5. Go to **Plugins -> Manage and Install Plugins** and enable **D-CASCADE**.
+5. Go to **Plugins -> Manage and Install Plugins** and enable **Q-Cascade**.
 
 The installer automatically:
 - Copies the plugin to the default QGIS profile.

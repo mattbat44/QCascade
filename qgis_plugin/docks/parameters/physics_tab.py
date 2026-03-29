@@ -1,5 +1,5 @@
 """
-@brief Physics parameters tab component for D-CASCADE parameters dock
+@brief Physics parameters tab component for Q-Cascade parameters dock
 @author Matt Adams
 """
 

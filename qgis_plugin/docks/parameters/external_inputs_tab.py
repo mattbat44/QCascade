@@ -1,5 +1,5 @@
 """
-@brief External inputs tab component for D-CASCADE parameters dock
+@brief External inputs tab component for Q-Cascade parameters dock
 @author Matt Adams
 """
 
@@ -113,7 +113,7 @@ class ExternalInputsTab(QWidget):
     def create_external_input_template(self):
         """Create a CSV template for the selected reach and open it for editing."""
         if self.selected_reach_idx is None:
-            QgsMessageLog.logMessage("Please select a reach in the map first.", "D-CASCADE", Qgis.Info)
+            QgsMessageLog.logMessage("Please select a reach in the map first.", "Q-Cascade", Qgis.Info)
             return
 
         default_name = f"reach_{self.selected_reach_idx}.csv"

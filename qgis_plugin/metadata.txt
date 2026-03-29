@@ -1,5 +1,5 @@
 [general]
-name=D-CASCADE
+name=Q-Cascade
 qgisMinimumVersion=3.0
 qgisMaximumVersion=4.0
 description=Dynamic CAtchment Sediment Connectivity And Delivery - Sediment transport modeling plugin
@@ -7,7 +7,7 @@ version=2.0.0
 author=Matt Adams
 email=
 
-about=D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-based modeling framework for sediment transport and connectivity analysis in large river networks. Compatible with QGIS 3.x (PyQt5) and QGIS 4.0 (PyQt6).
+about=Q-Cascade (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-based modeling framework for sediment transport and connectivity analysis in large river networks. Compatible with QGIS 3.x (PyQt5) and QGIS 4.0 (PyQt6).
 
 tags=sediment,transport,river,network,modeling
 

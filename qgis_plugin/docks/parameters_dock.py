@@ -1,5 +1,5 @@
 """
-@brief Tabbed dock widget for D-CASCADE parameters and configuration
+@brief Tabbed dock widget for Q-Cascade parameters and configuration
 @author Matt Adams
 """
 
@@ -28,7 +28,7 @@ class ParametersDock(QDockWidget):
     load_run_requested = pyqtSignal(str)
     
     def __init__(self, parent=None):
-        super().__init__("D-CASCADE Parameters", parent)
+        super().__init__("Q-Cascade Parameters", parent)
         
         self.container = QWidget()
         self.main_layout = QVBoxLayout(self.container)

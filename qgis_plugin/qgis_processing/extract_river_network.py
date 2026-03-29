@@ -2,12 +2,12 @@
 """
 QGIS Processing Script for D-CASCADE River Network Extraction from DEM
 
-This script provides a QGIS Processing algorithm to extract river networks from
+QGIS Processing Script for Q-Cascade River Network Extraction from DEM
 Digital Elevation Models (DEMs) and prepare them for use with D-CASCADE.
 
 The script performs the following steps:
 1. Breach depressions in the DEM
-2. Fill sinks
+1. Breach depressions in the DEM
 3. Calculate flow direction
 4. Calculate flow accumulation
 5. Extract river network based on minimum contributing area threshold
@@ -16,6 +16,7 @@ The script performs the following steps:
 8. Generate all required attribute columns for D-CASCADE
 
 @author: D-CASCADE Development Team
+@author: Q-Cascade Development Team
 @date: 2025
 """
 
@@ -83,11 +84,11 @@ class RiverNetworkExtractionAlgorithm(QgsProcessingAlgorithm):
     
     def displayName(self):
         """User-friendly algorithm name"""
-        return self.tr('Extract River Network for D-CASCADE')
+        return self.tr('Extract River Network for Q-Cascade')
     
     def group(self):
         """Group identifier"""
-        return self.tr('D-CASCADE')
+        return self.tr('Q-Cascade')
     
     def groupId(self):
         """Group identifier"""

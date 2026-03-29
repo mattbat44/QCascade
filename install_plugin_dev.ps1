@@ -1,5 +1,5 @@
 # install_plugin_dev.ps1
-# Install D-CASCADE QGIS Plugin for Development
+# Install Q-Cascade QGIS Plugin for Development
 # Creates a symlink/junction from QGIS plugins directory to development directory
 # Uses the 'dcascade-testing' QGIS profile
 
@@ -16,7 +16,7 @@ $devPath = Join-Path $scriptPath "qgis_plugin"
 $qgisPluginsPath = "$env:APPDATA\QGIS\QGIS\profiles\$profileName\python\plugins\$pluginName"
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "D-CASCADE QGIS Plugin Development Setup" -ForegroundColor Cyan
+Write-Host "Q-Cascade QGIS Plugin Development Setup" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Development path: $devPath" -ForegroundColor Yellow
@@ -110,7 +110,7 @@ try {
     Write-Host "Next steps:" -ForegroundColor Cyan
     Write-Host "1. Open QGIS with profile '$profileName'" -ForegroundColor White
     Write-Host "2. Go to Plugins Manage and Install Plugins" -ForegroundColor White
-    Write-Host "3. Enable D-CASCADE plugin" -ForegroundColor White
+    Write-Host "3. Enable Q-Cascade plugin" -ForegroundColor White
     Write-Host "4. For rapid development, install Plugin Reloader plugin" -ForegroundColor White
     Write-Host "   (allows reloading plugin without restarting QGIS)" -ForegroundColor White
     Write-Host ""

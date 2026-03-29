@@ -1,5 +1,5 @@
 """
-@brief Dock widget for viewing and analyzing D-CASCADE simulation results
+@brief Dock widget for viewing and analyzing Q-Cascade simulation results
 @author Matt Adams
 """
 
@@ -349,7 +349,7 @@ class ResultsViewerDock(QDockWidget):
             if self.results_data_ext:
                 msg += "\nExtended results loaded."
 
-            QgsMessageLog.logMessage(msg, "D-CASCADE", Qgis.Info)
+            QgsMessageLog.logMessage(msg, "Q-Cascade", Qgis.Info)
             self.results_loaded.emit()
 
         except Exception as e:
@@ -437,7 +437,7 @@ class ResultsViewerDock(QDockWidget):
 
             QgsMessageLog.logMessage(
                 f"Loaded discharge CSV: {Path(file_path).name} ({q_array.shape})",
-                "D-CASCADE", Qgis.Info
+                "Q-Cascade", Qgis.Info
             )
             self.info_label.setText(
                 (self.info_label.text().rstrip() +
@@ -497,7 +497,7 @@ class ResultsViewerDock(QDockWidget):
             )
             QgsMessageLog.logMessage(
                 f"Results exported to spreadsheet: {file_path}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info,
             )
         except ImportError:

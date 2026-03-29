@@ -1,5 +1,5 @@
 """
-D-CASCADE QGIS Plugin
+Q-Cascade QGIS Plugin
 """
 
 # Ensure this package loads instead of the solver module with the same name
@@ -21,7 +21,7 @@ if _plugin_dir in sys.path:
 sys.path.insert(0, _plugin_dir)
 
 def classFactory(iface):
-    """Load D-CASCADE plugin class from file dcascade_plugin."""
+    """Load Q-Cascade plugin class from file dcascade_plugin."""
     from .dcascade_plugin import DCascadePlugin
     return DCascadePlugin(iface)
 

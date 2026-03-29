@@ -1,2 +1,2 @@
-# Core module for D-CASCADE QGIS plugin
+# Core module for Q-Cascade QGIS plugin
 

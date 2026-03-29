@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "Install D-CASCADE Dependencies to QGIS Python" -ForegroundColor Cyan
+Write-Host "Install Q-Cascade Dependencies to QGIS Python" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 

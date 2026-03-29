@@ -1,6 +1,6 @@
 @echo off
 echo ====================================================
-echo D-CASCADE QGIS Plugin Development Installation
+echo Q-Cascade QGIS Plugin Development Installation
 echo ====================================================
 echo.
 
@@ -43,7 +43,7 @@ echo.
 echo ====================================================
 echo Development installation complete!
 echo ====================================================
-echo Please restart QGIS and enable the D-CASCADE plugin
+echo Please restart QGIS and enable the Q-Cascade plugin
 echo via Plugins -^> Manage and Install Plugins
 echo.
 pause

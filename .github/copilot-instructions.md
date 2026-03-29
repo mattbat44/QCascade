@@ -1,7 +1,7 @@
-# D-CASCADE AI Coding Instructions
+# Q-Cascade AI Coding Instructions
 
 ## Project Overview
-D-CASCADE (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-based modeling framework for sediment transport and connectivity analysis in large river networks. It simulates sediment transfer through river reaches over time.
+Q-Cascade (Dynamic CAtchment Sediment Connectivity And Delivery) is a Python-based modeling framework for sediment transport and connectivity analysis in large river networks. It simulates sediment transfer through river reaches over time.
 
 ## Architecture & Core Components
 

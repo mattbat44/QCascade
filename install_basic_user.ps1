@@ -1,6 +1,6 @@
 # install_basic_user.ps1
 # One-click installer for non-developer users.
-# Installs the D-CASCADE plugin into the default QGIS profile and installs
+# Installs the Q-Cascade plugin into the default QGIS profile and installs
 # required Python packages into the detected QGIS Python environment.
 
 [CmdletBinding()]
@@ -128,7 +128,7 @@ function Install-Dependencies {
 }
 
 try {
-    Write-Section "D-CASCADE Basic User Installer"
+    Write-Section "Q-Cascade Basic User Installer"
 
     $qgisProcesses = Get-Process -Name "qgis*" -ErrorAction SilentlyContinue
     if ($qgisProcesses) {
@@ -148,11 +148,11 @@ try {
     Install-Dependencies -PythonExe $pythonExe
 
     Write-Section "Installation Complete"
-    Write-Host "D-CASCADE is installed for the default QGIS profile." -ForegroundColor Green
+    Write-Host "Q-Cascade is installed for the default QGIS profile." -ForegroundColor Green
     Write-Host "Next steps:" -ForegroundColor Cyan
     Write-Host "1. Start QGIS" -ForegroundColor White
     Write-Host "2. Open Plugins -> Manage and Install Plugins" -ForegroundColor White
-    Write-Host "3. Enable D-CASCADE" -ForegroundColor White
+    Write-Host "3. Enable Q-Cascade" -ForegroundColor White
 } catch {
     Write-Host "" 
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red

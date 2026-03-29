@@ -1,5 +1,5 @@
 """
-@brief D-CASCADE QGIS Plugin main class
+@brief Q-Cascade QGIS Plugin main class
 @author Matt Adams
 """
 
@@ -43,7 +43,7 @@ CONNECTIVITY_COLOR = '#2E86AB'  # Single color for connectivity curves (blue)
 
 
 class DCascadePlugin:
-    """Main plugin class for D-CASCADE QGIS plugin."""
+    """Main plugin class for Q-Cascade QGIS plugin."""
     
     def __init__(self, iface):
         """Initialize the plugin."""
@@ -116,7 +116,7 @@ class DCascadePlugin:
         # Connect map canvas selection
         self.canvas.selectionChanged.connect(self.on_map_selection_changed)
         
-        # Dropdown menu under a single D-CASCADE toolbar button
+        # Dropdown menu under a single Q-Cascade toolbar button
         self.parameters_action = QAction("Show Parameters", self.iface.mainWindow())
         self.parameters_action.setObjectName("DCascadeParametersAction")
         self.parameters_action.triggered.connect(self.show_parameters_dock)
@@ -130,17 +130,17 @@ class DCascadePlugin:
         menu.addAction(self.results_action)
 
         self.toolbar_button = QToolButton()
-        self.toolbar_button.setText("D-CASCADE")
+        self.toolbar_button.setText("Q-Cascade")
         self.toolbar_button.setMenu(menu)
         self.toolbar_button.setPopupMode(QToolButton_InstantPopup)
-        self.toolbar_button.setToolTip("D-CASCADE tools")
+        self.toolbar_button.setToolTip("Q-Cascade tools")
 
         # Place the dropdown button on the toolbar in order
         self.toolbar_widget_action = self.iface.addToolBarWidget(self.toolbar_button)
 
         # Add plugin menu entries
-        self.iface.addPluginToMenu("&D-CASCADE", self.parameters_action)
-        self.iface.addPluginToMenu("&D-CASCADE", self.results_action)
+        self.iface.addPluginToMenu("&Q-Cascade", self.parameters_action)
+        self.iface.addPluginToMenu("&Q-Cascade", self.results_action)
         
         # Force initial layer selection from parameters dock
         if self.parameters_dock and self.parameters_dock.layer_combo:
@@ -150,16 +150,16 @@ class DCascadePlugin:
                 # Also check for existing selection
                 self.on_map_selection_changed()
         
-        QgsMessageLog.logMessage("D-CASCADE plugin initialized", "D-CASCADE", Qgis.Info)
+        QgsMessageLog.logMessage("Q-Cascade plugin initialized", "Q-Cascade", Qgis.Info)
         self.initialized = True
     
     def unload(self):
         """Unload the plugin."""
         # Remove menu entries
         if self.parameters_action:
-            self.iface.removePluginMenu("&D-CASCADE", self.parameters_action)
+            self.iface.removePluginMenu("&Q-Cascade", self.parameters_action)
         if self.results_action:
-            self.iface.removePluginMenu("&D-CASCADE", self.results_action)
+            self.iface.removePluginMenu("&Q-Cascade", self.results_action)
 
         # Remove toolbar items
         self.remove_toolbar_items()
@@ -203,7 +203,7 @@ class DCascadePlugin:
         if self.canvas:
             self.canvas.selectionChanged.disconnect(self.on_map_selection_changed)
         
-        QgsMessageLog.logMessage("D-CASCADE plugin unloaded", "D-CASCADE", Qgis.Info)
+        QgsMessageLog.logMessage("Q-Cascade plugin unloaded", "Q-Cascade", Qgis.Info)
     
     def run(self):
         """Main entry point - show/hide docks."""
@@ -287,14 +287,14 @@ class DCascadePlugin:
         missing = self._missing_required_fields(layer)
         if missing:
             QgsMessageLog.logMessage(
-                f"Network layer '{layer.name()}' is missing required fields: {', '.join(missing)}",
-                "D-CASCADE",
-                Qgis.Warning
-            )
+                    f"Network layer '{layer.name()}' is missing required fields: {', '.join(missing)}",
+                    "Q-Cascade",
+                    Qgis.Warning
+                )
         else:
             QgsMessageLog.logMessage(
                 f"Network layer selected: {layer.name()}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
     
@@ -333,7 +333,7 @@ class DCascadePlugin:
             self.selected_reach_id = None
             self.parameters_dock.set_selected_reach(None)
             if self.results_viewer_dock:
-                QgsMessageLog.logMessage("No reach selected", "D-CASCADE", Qgis.Info)
+                QgsMessageLog.logMessage("No reach selected", "Q-Cascade", Qgis.Info)
                 #self.results_viewer_dock.graph_selected_reach(None)
             return
 
@@ -359,9 +359,9 @@ class DCascadePlugin:
 
     def on_external_input_added(self, reach_idx, csv_path):
         """Handle external input CSV added to reach."""
-        QgsMessageLog.logMessage(
+            QgsMessageLog.logMessage(
             f"External input added to reach {reach_idx}: {csv_path}",
-            "D-CASCADE",
+            "Q-Cascade",
             Qgis.Info
         )
     
@@ -392,7 +392,7 @@ class DCascadePlugin:
     def update_layer_symbology(self, time_step):
         """Update network layer symbology based on results for given time step."""
         if self.network_layer is None:
-            QgsMessageLog.logMessage("Cannot update symbology: No network layer selected", "D-CASCADE", Qgis.Warning)
+            QgsMessageLog.logMessage("Cannot update symbology: No network layer selected", "Q-Cascade", Qgis.Warning)
             return
             
         if self.results_viewer_dock.results_data is None:
@@ -401,7 +401,7 @@ class DCascadePlugin:
         # Get the current variable from results viewer
         variable = self.results_viewer_dock.dyn_variable_combo.currentText()
         if variable not in self.results_viewer_dock.results_data:
-            QgsMessageLog.logMessage(f"Cannot update symbology: Variable '{variable}' not found in results", "D-CASCADE", Qgis.Warning)
+            QgsMessageLog.logMessage(f"Cannot update symbology: Variable '{variable}' not found in results", "Q-Cascade", Qgis.Warning)
             return
         
         data = self.results_viewer_dock.results_data[variable]
@@ -426,7 +426,7 @@ class DCascadePlugin:
         # Create or reuse in-memory animation layer
         if self.animation_layer is None:
             uri = f"{geom_type}?crs={crs_authid}"
-            self.animation_layer = QgsVectorLayer(uri, "D-CASCADE Animation", "memory")
+            self.animation_layer = QgsVectorLayer(uri, "Q-Cascade Animation", "memory")
             prov = self.animation_layer.dataProvider()
             prov.addAttributes([
                 QgsField("FromN", QVariant.String),
@@ -556,7 +556,7 @@ class DCascadePlugin:
     def update_connectivity_curves(self, time_step):
         """Update connectivity curves layer based on Direct connectivity data for given time step."""
         if self.network_layer is None:
-            QgsMessageLog.logMessage("Cannot update connectivity: No network layer selected", "D-CASCADE", Qgis.Warning)
+            QgsMessageLog.logMessage("Cannot update connectivity: No network layer selected", "Q-Cascade", Qgis.Warning)
             return
         
         if self.results_viewer_dock.results_data is None:
@@ -564,7 +564,7 @@ class DCascadePlugin:
         
         # Check if Direct connectivity data exists
         if CONNECTIVITY_DATA_KEY not in self.results_viewer_dock.results_data:
-            QgsMessageLog.logMessage(f"Cannot update connectivity: '{CONNECTIVITY_DATA_KEY}' not found in results", "D-CASCADE", Qgis.Warning)
+            QgsMessageLog.logMessage(f"Cannot update connectivity: '{CONNECTIVITY_DATA_KEY}' not found in results", "Q-Cascade", Qgis.Warning)
             return
         
         direct_connectivity = self.results_viewer_dock.results_data[CONNECTIVITY_DATA_KEY]
@@ -590,7 +590,7 @@ class DCascadePlugin:
         # Create or reuse connectivity layer
         if self.connectivity_layer is None:
             uri = "LineString?crs=" + self.network_layer.crs().authid()
-            self.connectivity_layer = QgsVectorLayer(uri, "D-CASCADE Connectivity", "memory")
+            self.connectivity_layer = QgsVectorLayer(uri, "Q-Cascade Connectivity", "memory")
             prov = self.connectivity_layer.dataProvider()
             prov.addAttributes([
                 QgsField("from_reach", QVariant.Int),
@@ -914,7 +914,7 @@ class DCascadePlugin:
             self.results_viewer_dock.graph_selected_reach(reach_idx)
     
     def run_simulation(self):
-        """Run D-CASCADE simulation with current configuration."""
+        """Run Q-Cascade simulation with current configuration."""
         try:
             # Collect configuration
             config = self.collect_config()
@@ -928,7 +928,7 @@ class DCascadePlugin:
             
             QgsMessageLog.logMessage(
                 f"Configuration saved to {config_path}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
             
@@ -940,7 +940,7 @@ class DCascadePlugin:
             
             QgsMessageLog.logMessage(
                 "Simulation started in background. Check the QGIS message log for progress.",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
             
@@ -1054,7 +1054,7 @@ class DCascadePlugin:
         except Exception as e:
             QgsMessageLog.logMessage(
                 f"External inputs config error: {e}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Warning
             )
         
@@ -1076,7 +1076,7 @@ class DCascadePlugin:
             config.to_json(path)
             QgsMessageLog.logMessage(
                 f"Configuration saved to:\n{path}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
         except Exception as e:
@@ -1095,7 +1095,7 @@ class DCascadePlugin:
             self.apply_config_to_ui(cfg)
             QgsMessageLog.logMessage(
                 f"Configuration loaded from:\n{path}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
         except Exception as e:
@@ -1125,7 +1125,7 @@ class DCascadePlugin:
             self.apply_config_to_ui(cfg)
             QgsMessageLog.logMessage(
                 f"Configuration loaded from run file:\n{path}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
         except Exception as e:
@@ -1207,14 +1207,14 @@ class DCascadePlugin:
     
     def on_log_message(self, msg):
         """Handle log message from simulation thread."""
-        QgsMessageLog.logMessage(msg, "D-CASCADE", Qgis.Info)
+        QgsMessageLog.logMessage(msg, "Q-Cascade", Qgis.Info)
     
     def on_simulation_finished(self, success, msg):
         """Handle simulation completion."""
         if success:
             QgsMessageLog.logMessage(
                 msg,
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Info
             )
             # Auto-load results
@@ -1245,7 +1245,7 @@ class DCascadePlugin:
         except Exception as e:
             QgsMessageLog.logMessage(
                 f"Could not auto-load results: {e}",
-                "D-CASCADE",
+                "Q-Cascade",
                 Qgis.Warning
             )
 

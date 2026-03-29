@@ -157,13 +157,13 @@ class InputsTab(QWidget):
     
     def on_save_clicked(self):
         """Ask for path and emit save request."""
-        path, _ = QFileDialog.getSaveFileName(self, "Save D-CASCADE config", "config.json", "JSON Files (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Q-Cascade config", "config.json", "JSON Files (*.json)")
         if path:
             self.save_config_requested.emit(path)
 
     def on_load_config_clicked(self):
         """Ask for config json and emit load request."""
-        path, _ = QFileDialog.getOpenFileName(self, "Load D-CASCADE config", "", "JSON Files (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Load Q-Cascade config", "", "JSON Files (*.json)")
         if path:
             self.load_config_requested.emit(path)
 
