@@ -154,20 +154,22 @@ try {
         throw "Please close QGIS before installation, then run this script again."
     }
 
-    Write-Section "Step 1/3 - Install Plugin Files"
-    Install-PluginFiles
-
-    Write-Section "Step 2/3 - Install Python Dependencies"
+    Write-Section "Step 1/4 - Detect QGIS Python"
     $pythonExe = Find-QgisPython
 
     if (-not $pythonExe) {
         throw "Could not find QGIS Python automatically. Install QGIS first, then re-run this script."
     }
 
+    Write-Section "Step 2/4 - Install Python Dependencies"
+
     Install-Dependencies -PythonExe $pythonExe
 
-    Write-Section "Step 3/3 - Fetch Upstream Model Files"
+    Write-Section "Step 3/4 - Fetch Upstream Model Files"
     Fetch-ModelFiles -PythonExe $pythonExe
+
+    Write-Section "Step 4/4 - Install Plugin Files"
+    Install-PluginFiles
 
     Write-Section "Installation Complete"
     Write-Host "D-CASCADE is installed for the default QGIS profile." -ForegroundColor Green

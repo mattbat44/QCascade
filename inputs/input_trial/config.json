@@ -1,11 +1,9 @@
 {
     "paths": {
-        "river_network_shp": "C:\\Users\\maad\\GIS_Local\\D-CASCADE-PY\\dcascade-py-2.0.0\\inputs\\input_trial\\River_Network.shp",
-        "discharge_csv": "C:/Users/maad/Downloads/dcascade-py-2.0.0-qgis-plugin/dcascade-py-2.0.0-qgis-plugin/inputs/input_trial/Q_Vjosa.csv",
-        "output_name": "qgis_test",
-        "output_dir": "C:/Users/maad/GIS_Local/D-CASCADE-PY/dcascade-py-2.0.0/outputs",
-        "overbank_q_csv": null
-        "output_dir": "C:/Users/maad/GIS_Local/D-CASCADE-PY/dcascade-py-2.0.0/outputs",
+        "river_network_shp": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/River_Network.shp",
+        "discharge_csv": "C:/Users/matta/Documents/dcascade-py-2.0.0/inputs/input_trial/Q_Vjosa.csv",
+        "output_name": "simulation_output",
+        "output_dir": "C:/Users/matta/Documents/dcascade-py-2.0.0/outputs",
         "overbank_q_csv": null
     },
     "sediment": {
@@ -23,22 +21,21 @@
         "ts_length": 86400.0
     },
     "physics": {
-        "transport_capacity_formula": 3,
-        "transport_partitioning": 3,
+        "transport_capacity_formula": 2,
+        "transport_partitioning": 4,
         "flow_depth_formula": 1,
         "velocity_formula": 2,
         "velocity_partitioning": 1,
         "slope_reduction": 1,
         "width_calculation": 1,
-        "update_slope": true,
+        "update_slope": false,
         "velocity_height": "2D90",
         "erosion_max": null
     },
     "options": {
         "save_deposit_layer": "never",
         "round_parameter": 0,
-        "force_pass_external_inputs": true
+        "force_pass_external_inputs": false
     },
-    "external_inputs": null
     "external_inputs": null
 }
